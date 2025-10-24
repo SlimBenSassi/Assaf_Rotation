@@ -1,0 +1,17 @@
+# Large Data Files (Must be excluded)
+*.bdf
+*.mat
+*.set
+*.fdt
+*.vhdr
+*.vmrk
+
+
+# Large Document/Image Files (Must be excluded)
+*.jpg
+*.webp
+*.fig
+
+Results/raw.fig
+Results/post-ica.fig
+Code/tools/Training/EEG_preprocessing_package/Copy_of_EEG_preprocessing_pipeline.asv

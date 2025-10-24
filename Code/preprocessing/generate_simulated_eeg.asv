@@ -1,0 +1,66 @@
+%% generate_simulated_eeg: Creates a structure named SDATA in the Workspace
+%
+% This script simulates a raw EEG recording with three components:
+% 1. Pink noise (general background activity)
+% 2. DC Drift (low-frequency artifact)
+% 3. EOG Blink (high-amplitude transient artifact in frontal channels)
+%
+% The final data is placed in the base workspace variable 'SDATA'.
+
+% --- Global Parameters ---
+Fs = 500;           % Sampling Rate (Hz)
+t_total = 300;      % Total recording duration (300 seconds = 5 minutes)
+n_channels = 64;    % Number of EEG channels
+n_timepoints = Fs * t_total;
+
+% Create Time Vector (Crucial for all calculations)
+time_vec = (0:n_timepoints-1) / Fs;
+
+% --- 1. Generate Brain Signal (Alpha Oscillation) ---
+alpha_freq = 10; % Hz
+alpha_amp = 8;   % uV
+
+% Generate noise for all channels [Time x Channels]
+eeg_data = randn(n_timepoints, n_channels) * 2; 
+
+% Add organized Alpha signal to central/posterior channels (e.g., 20-30)
+alpha_signal = alpha_amp * sin(2*pi*alpha_freq * time_vec);
+eeg_data(:, 20:30) = eeg_data(:, 20:30) + alpha_signal' * 0.5;
+
+
+% --- 2. Generate Low-Frequency Artifact (DC Drift) ---
+drift = cumsum(randn(n_timepoints, 1)) * 0.005;
+eeg_data = eeg_data + drift;
+
+
+% --- 3. Generate High-Amplitude Artifact (EOG Blink) ---
+blink_time = 100; % Artifact happens at 100 seconds
+blink_duration = 0.3 * Fs;
+blink_onset = round(blink_time * Fs);
+blink_end = blink_onset + blink_duration;
+blink_shape = hanning(blink_duration + 1) * 30; 
+
+% Apply artifact strongly to frontal channels (e.g., Channels 1-4)
+eeg_data(blink_onset:blink_end, 1:4) = eeg_data(blink_onset:blink_end, 1:4) + blink_shape;
+
+
+% --- 4. Final Formatting and Placement ---
+SDATA.data = single(eeg_data); % Time x Channel
+SDATA.info.sampling_rate = Fs;
+SDATA.info.channel_labels = cellstr("E" + (1:n_channels)'); 
+SDATA.info.channel_labels{1} = 'FP1'; 
+SDATA.info.channel_labels{64} = 'Status'; 
+SDATA.time_vec = time_vec; % Add time vector for convenience
+
+disp('Simulated raw data SDATA created in Workspace.');
+
+%% create data file
+
+% Define the filename to save the data
+filename = 'simulated_eeg_data.mat';
+
+% Save the EEG data and time vector to a .mat file
+save(filename, SDATA);
+
+% Display a message indicating that the data has been saved
+disp(['EEG data saved to ', filename]);
