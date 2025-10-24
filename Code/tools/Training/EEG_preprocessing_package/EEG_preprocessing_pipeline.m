@@ -1,7 +1,7 @@
 
 %% 1. initialize 
 
-clear; close all; clc
+%clear; close all; clc
 
 raw_data_path = "\\wks3\pr_breska\el-Slim\random assaf data (controls)";  % The file selection dialog will open on this folder
 
@@ -13,7 +13,7 @@ raw_data_path = "\\wks3\pr_breska\el-Slim\random assaf data (controls)";  % The 
 
 
 %% 2. choose data file, load and append
-clc
+%clc
 
 if ~exist('raw_data_path','var')
     raw_data_path=cd;

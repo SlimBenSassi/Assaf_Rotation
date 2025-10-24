@@ -1,7 +1,11 @@
 %% 1. INITIALIZE AND PATH SETUP
-clear; close all; clc
+%clear; close all; clc
 
 % --- PROJECT CONFIGURATION FLAG ---
+
+% NECESARRY STEPS TO RUN THIS WITHOUT DEPENDENCY ERRORS:
+% Add Code and its subfolder to path
+% Add eeglab to path (not subfolders)
 
 
 
@@ -78,6 +82,22 @@ else % --- REAL DATA MODE (Original UI Logic) ---
     SDATA.info.sampling_rate = hdr.Fs;
     SDATA.info.channel_labels = hdr.label;
     SDATA.data = double(SDATA.data);
+     % --- CRITICAL FIX: TRANSFER REAL EVENT MARKERS (from EEG_temp) ---
+    % Assumes EEG_temp from the last iteration contains the complete event list.
+    if isfield(EEG_temp, 'event') && ~isempty(EEG_temp.event)
+        
+        % Extract latencies (which are in samples/time points)
+        % We convert the list of structures to a vector of sample indices
+        event_latencies = [EEG_temp.event.latency];
+        
+        % We only care about the time point indices (in samples)
+        SDATA.events.trigger_indices = event_latencies'; 
+        disp(['Transferred ' num2str(length(event_latencies)) ' real event markers from BIOSIG.']);
+        
+    else
+        disp('Warning: No events found in EEG_temp structure.');
+    end
+
 end % END MODE SWITCH
 
 % --- Log the data sizes (Crucial Check) ---
@@ -240,7 +260,7 @@ disp(['ICA Input Data Size: ' num2str(size(EEG_ICA.data)) ' (Channels x Time)'])
 n_channels = size(EEG_ICA.data, 1);
 % The lab's strategy: Reduce rank by one for stability/speed (N-1 components).
 pca_rank = n_channels - 1; 
-TARGET_MAXSTEPS = 20; % Time constraint: Stop after 50 steps for quick debugging
+TARGET_MAXSTEPS = 10; % Time constraint: Stop after 50 steps for quick debugging
 
 disp(['Starting runica algorithm with PCA reduction to ' num2str(pca_rank) ' components and maxsteps=' num2str(TARGET_MAXSTEPS) '...']);
 
@@ -391,6 +411,17 @@ disp('ICA artifact removal pipeline finished.');
 
 
 
-%% Final data visualization
+%% 10. SAVE SDATA (Final Preprocessed File)
 
-plot_multichannel(SDATA.data,Fs, "final");
+clc
+% We use a specific, unique filename for the preprocessed data.
+subject_ids = 1; % Assume subject ID 1 for simulation
+% Creates a filename like 'subj1_pp.mat'
+fileNameSave = fullfile('Results', ['subj' num2str(subject_ids) '_pp.mat']); 
+
+disp(['Saving clean, preprocessed data to: ' fileNameSave]);
+
+% The clean data structure is now fully finalized and saved
+save(fileNameSave, 'SDATA', '-v7.3'); % Use -v7.3 for large files (optional)
+
+disp(['Done saving clean data for subject ' num2str(subject_ids)]);
