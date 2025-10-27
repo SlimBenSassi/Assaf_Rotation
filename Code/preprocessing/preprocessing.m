@@ -1,11 +1,13 @@
 %% 1. INITIALIZE AND PATH SETUP
-%clear; close all; clc
+clear; close all; clc
 
 % --- PROJECT CONFIGURATION FLAG ---
+
 
 % NECESARRY STEPS TO RUN THIS WITHOUT DEPENDENCY ERRORS:
 % Add Code and its subfolder to path
 % Add eeglab to path (not subfolders)
+% run eeglab; in command window
 
 
 

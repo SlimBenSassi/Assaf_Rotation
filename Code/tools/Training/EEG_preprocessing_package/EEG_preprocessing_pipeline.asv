@@ -2,7 +2,7 @@
 %% 1. initialize 
 
 clear; close all; clc
-    
+
 
 % NECESARRY STEPS TO RUN THIS WITHOUT DEPENDENCY ERRORS:
 % Add Code and its subfolder to path
@@ -26,11 +26,10 @@ end
 % select files of a single subject 
 % [data_file_list, ~] = uigetfile({'*.bdf','BDF file (*.bdf)' ;'*.*', 'All files (*.*)'},'Select raw file/s',raw_data_path,'multiselect','on');
 % if isscalar(data_file_list)
-[data_file_list, ndp] = uigetfile({'*.bdf','BDF file (*.bdf)' ;'*.*', 'All files (*.*)'},'Select raw file/s',raw_data_path,'multiselect','on');
+[data_file_list, nds] = uigetfile({'*.bdf','BDF file (*.bdf)' ;'*.*', 'All files (*.*)'},'Select raw file/s',raw_data_path,'multiselect','on');
 if isscalar(data_file_list)
     % No file was selected. 
 else
-    raw_data_path = ndp;
     if ~iscell(data_file_list)        
         data_file_list = {data_file_list}; % Single file was selected - put it in a 1x1 cell array
     end

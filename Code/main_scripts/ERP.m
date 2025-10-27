@@ -1,20 +1,36 @@
 %% ERP ANALYSIS SPEEDRUN: CNV and P3 Components
 
 % --- GOAL: Calculate and visualize two key timing ERPs (P3 and CNV) ---
-
 %% 1. INITIALIZE AND LOAD CLEAN DATA
 
 clear; close all; clc
 disp('--- Starting ERP Speedrun ---');
 
-% Load the clean, preprocessed data structure saved from the last session.
-clean_data_file = fullfile('Results', 'subj1_pp.mat');
-if ~exist(clean_data_file, 'file')
-    error(['Clean data file not found at: ' clean_data_file '. Please ensure preprocessing was run and saved.']);
+% --- Configuration ---
+DEFAULT_PATH = 'C:\Users\ssassi\Desktop\Assaf_Rotation\Data'; % Default folder where your processed data is saved
+%example christina data: \\wks3\pr_breska\el-Christina\Backup Copy Christina\PF_Poster\Data\EEG\
+
+% --- 1. Use UIGETFILE for Interactive Selection (GUI Dialog) ---
+[filename, filepath] = uigetfile({'*.mat','MATLAB Data File (*.mat)' ;'*.*', 'All files (*.*)'},...
+                                    'Select Clean Preprocessed SDATA File', DEFAULT_PATH);
+
+if isequal(filename, 0)
+    disp('No file selected. Aborting script.');
+    return; 
 end
 
-load(clean_data_file, 'SDATA');
-disp('Clean SDATA loaded successfully.');
+full_file_path = fullfile(filepath, filename);
+
+% --- 2. Load the Data ---
+try
+    % Load only the SDATA variable from the selected .mat file
+    load(full_file_path, 'SDATA');
+    disp(['Loaded clean data from: ' filename]);
+catch ME
+    disp(['ERROR: Failed to load SDATA structure from ' filename]);
+    disp(['MATLAB Error: ' ME.message]);
+    error('Aborting due to critical data loading failure.');
+end
 
 % --- Extract Global Variables ---
 Fs = SDATA.info.sampling_rate;

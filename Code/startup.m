@@ -1,47 +1,48 @@
-%% MATLAB Startup Script for EEG Lab Rotation
+%% MATLAB Startup Script (Project Initialization)
 
-% 1. Clean up the environment
+% 1. Clean the environment to ensure a fresh start
 clc;
 clear;
 
-% --- A. Define Project Root and Paths ---
+% --- A. DEFINE ALL NECESSARY PATHS (UPDATE THESE) ---
+% These variables locate your resources outside the repo.
+EEGLAB_ROOT_PATH = 'C:\Users\ssassi\Desktop\eeglab2025.1.0'; 
+% BIOSIG_CORE_PATH removed, replaced by specific read_24bit path.
+
+% Find the current repository root based on this script's location
 this_script_path = fileparts(which('startup.m'));
-repo_root = fileparts(this_script_path);
+repo_root = fileparts(this_script_path); 
 
-% Define the full path to the Lab's Custom Functions
-CUSTOM_TOOLS_PATH = fullfile(repo_root, 'Code', 'tools'); 
+% --- NEW CRITICAL PATH: FOLDER CONTAINING read_24bit.m and .mexw64 ---
+% This path MUST point directly to the folder with the compatible read_24bit files.
+LAB_IO_HELPER_PATH = fullfile(repo_root, '02_CODE', 'tools', 'fieldtrip_io_helpers'); % <--- FIX THIS PATH
+
+% --- B. SET PRIORITY (The Fix for Conflicts) ---
+% We use '-begin' to push custom/essential functions to the top of the path.
+
+% 1. Add Lab I/O Helpers (Highest Priority for read_24bit)
+addpath(LAB_IO_HELPER_PATH, '-begin');
+disp('Lab I/O Helpers (read_24bit) added to path.');
+
+% 2. Add Custom Lab Tools (HPF, multichanplot, etc.)
+addpath(fullfile(repo_root, '02_CODE', 'tools'), '-begin');
+addpath(fullfile(repo_root, '02_CODE', 'tools', 'channel_locs'), '-begin');
+
+% 3. Add EEGLAB Root
+addpath(EEGLAB_ROOT_PATH, '-begin'); 
+disp('EEGLAB initialized to high priority.');
 
 
-% -----------------------------------------------------------
-% *** CRUCIAL CHANGE: ADD REPO PATHS BEFORE EEGLAB ***
-% -----------------------------------------------------------
+% --- C. FINAL ACTIONS ---
 
-% 2. Add the Lab's specific custom functions (HPF, read_biosemi_bdf, etc.) FIRST
-addpath(CUSTOM_TOOLS_PATH);
-% Add the rest of the repo structure (main_scripts, etc.)
-addpath(genpath(repo_root)); 
-disp('Project structure and Lab Tools added to path.');
+% Remove any conflicting paths that may have persisted
+rmpath(genpath(EEGLAB_ROOT_PATH)); 
 
-CHANNEL_LOCS_PATH = fullfile(repo_root, 'Code', 'tools'); 
-
-% Add the channel locations folder
-addpath(CHANNEL_LOCS_PATH); 
-disp('Channel Locations added to path.');
-
-
-% --- C. INITIALIZE EEGLAB (Lower Priority) ---
-EEGLAB_PATH = 'C:\Users\ssassi\Desktop\Assaf_Rotation\Code\eeglab2025.1.0'; 
-
-% Remove any conflicting paths first (critical)
-rmpath(genpath(EEGLAB_PATH)); 
-
-% Add ONLY the root EEGLAB folder to the path
-addpath(EEGLAB_PATH); 
-
-% Initialize EEGLAB (This now has lower precedence than your custom tools)
+% 4. Initialize EEGLAB (This loads all plugins and GUI)
 try
     eeglab; 
-    disp('EEGLAB initialized (Lower Precedence).');
+    disp('Environment fully set up and stable.');
 catch ME
-    disp('WARNING: EEGLAB init failed.');
+    disp('WARNING: EEGLAB GUI failed to open. Check paths.');
 end
+
