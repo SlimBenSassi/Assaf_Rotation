@@ -37,6 +37,7 @@ Fs = SDATA.info.sampling_rate;
 data_matrix = SDATA.data; % [Time x Channels]
 channel_labels = SDATA.info.channel_labels;
 n_channels = size(data_matrix, 2);
+%%
 
 % --- CRITICAL FIX: Load REAL Event Markers ---
 % Now using the indices extracted from the Status Channel in the preprocessing script.
