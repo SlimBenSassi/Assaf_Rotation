@@ -13,7 +13,7 @@ DEFAULT_PATH = 'C:\Users\ssassi\Desktop\Assaf_Rotation\Data'; % Default folder w
 
 
 % Use uigetfile to locate the Alpha Results .mat file
-[filename, filepath] = uigetfile({'*AlphaResults*.mat','Alpha Results File (*.mat)' ;'*.*', 'All files (*.*)'},...
+[filename, filepath] = uigetfile({'*.mat','Alpha Results File (*.mat)' ;'*.*', 'All files (*.*)'},...
                                     'Select Alpha Power Results File');
 
 if isequal(filename, 0)
