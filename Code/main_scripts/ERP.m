@@ -4,7 +4,7 @@
 %% 1. INITIALIZE AND LOAD CLEAN DATA
 
 clear; close all; clc
-disp('--- Starting ERP Speedrun ---');
+disp('--- Starting ERP Speedrun---');
 
 % --- Configuration ---
 DEFAULT_PATH = 'C:\Users\ssassi\Desktop\Assaf_Rotation\Data'; % Default folder where your processed data is saved

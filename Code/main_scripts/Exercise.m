@@ -136,59 +136,39 @@ ERP_Rhythm_Long  = mean(all_epochs_corrected(:, :, idx_Rhythm_Long), 3);
 ERP_Interval_Short = mean(all_epochs_corrected(:, :, idx_Interval_Short), 3);
 ERP_Interval_Long  = mean(all_epochs_corrected(:, :, idx_Interval_Long), 3);
 
+%% 5. GENERATE SIMPLIFIED COMPARISON PLOT
 
-%% 5. GENERATE 2x2 COMPARISON PLOT
-
-% --- Configuration ---
+% --- CONFIGURATION ---
 Fs = SDATA.info.sampling_rate;
-% ERP time vector (calculated previously in Section 3)
+% ERP time vector (calculated previously)
 erp_time_vec = linspace(PRE_EVENT_SEC, POST_EVENT_SEC, size(ERP_Rhythm_Short, 1));
-% Find a central-parietal channel (where P3/N400 effects are often largest)
-channel_idx = 31; % Using Channel  Pz
+% Find a central-parietal channel
+channel_idx = 48; 
 
-figure('Units', 'normalized', 'Position', [0.05 0.05 0.9 0.85]); % Wide figure
+% --- 1. Create Figure ---
+figure('Units', 'normalized', 'Position', [0.2 0.2 0.5 0.6]); % Simple, medium figure
 
-% --- Standard Plotting Setup ---
-plot_setup = @(t) [line([0 0], ylim, 'Color', 'k', 'LineStyle', '--'); ...
-                   line(xlim, [0 0], 'Color', [0.5 0.5 0.5], 'LineStyle', ':'); ...
-                   set(gca, 'YDir', 'reverse'), title(t), xlabel('Time (s)'), ylabel('Amplitude (\muV)')];
-
-
-% --- SUBPLOT 1: RHYTHM SHORT vs. LONG (Interval Length Effect in Rhythm) ---
-subplot(2, 2, 1);
-plot(erp_time_vec, ERP_Rhythm_Short(:, channel_idx), 'b', 'LineWidth', 2, 'DisplayName', 'Short (112)');
+% --- 2. Plotting ---
+% Plot Rhythm Short (112)
+plot(erp_time_vec, ERP_Rhythm_Long(:, channel_idx), 'b', 'LineWidth', 2, 'DisplayName', 'Rhythm Short (112)');
 hold on;
-plot(erp_time_vec, ERP_Rhythm_Long(:, channel_idx), 'r', 'LineWidth', 2, 'DisplayName', 'Long (122)');
-plot_setup('Rhythm: Short vs. Long Interval');
+% Plot Rhythm Long (122)
+plot(erp_time_vec, ERP_Interval_Long(:, channel_idx), 'r', 'LineWidth', 2, 'DisplayName', 'Rhythm Long (122)');
+hold off;
+
+% --- 3. Aesthetics and Markers ---
+line([0 0], ylim, 'Color', 'k', 'LineStyle', '--'); % Vertical line at t=0
+line(xlim, [0 0], 'Color', [0.5 0.5 0.5], 'LineStyle', ':'); % Horizontal line at 0 uV
+xlim([PRE_EVENT_SEC, POST_EVENT_SEC]);
+
+% --- CRITICAL ERP CONVENTION FIX ---
+%set(gca, 'YDir', 'reverse'); % Invert Y-axis (Negative is Up)
+
+title(['ERP Comparison: Rhythm Short vs. Long at Channel ' num2str(channel_idx)], 'FontSize', 14);
+xlabel('Time relative to event (seconds)');
+ylabel('Amplitude (\muV)');
 legend('show', 'Location', 'SouthEast');
-
-
-% --- SUBPLOT 2: INTERVAL SHORT vs. LONG (Interval Length Effect in Memory) ---
-subplot(2, 2, 2);
-plot(erp_time_vec, ERP_Interval_Short(:, channel_idx), 'Color', [0 0.5 0], 'LineWidth', 2, 'DisplayName', 'Short (212)');
-hold on;
-plot(erp_time_vec, ERP_Interval_Long(:, channel_idx), 'Color', [0.8 0.2 0.8], 'LineWidth', 2, 'DisplayName', 'Long (222)');
-plot_setup('Interval: Short vs. Long Interval');
-legend('show', 'Location', 'SouthEast');
-
-
-% --- SUBPLOT 3: RHYTHM vs. INTERVAL (Short Duration, Structure Effect) ---
-subplot(2, 2, 3);
-plot(erp_time_vec, ERP_Rhythm_Short(:, channel_idx), 'b', 'LineWidth', 2, 'DisplayName', 'Rhythm (112)');
-hold on;
-plot(erp_time_vec, ERP_Interval_Short(:, channel_idx), 'Color', [0 0.5 0], 'LineWidth', 2, 'DisplayName', 'Interval (212)');
-plot_setup('Short Duration: Rhythm vs. Interval Structure');
-legend('show', 'Location', 'SouthEast');
-
-
-% --- SUBPLOT 4: RHYTHM vs. INTERVAL (Long Duration, Structure Effect) ---
-subplot(2, 2, 4);
-plot(erp_time_vec, ERP_Rhythm_Long(:, channel_idx), 'r', 'LineWidth', 2, 'DisplayName', 'Rhythm (122)');
-hold on;
-plot(erp_time_vec, ERP_Interval_Long(:, channel_idx), 'Color', [0.8 0.2 0.8], 'LineWidth', 2, 'DisplayName', 'Interval (222)');
-plot_setup('Long Duration: Rhythm vs. Interval Structure');
-legend('show', 'Location', 'SouthEast');
-
+grid on;
 
 %% 6. SAVE FINAL FIGURE AND DATA
 
