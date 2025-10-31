@@ -41,12 +41,20 @@ channel_labels = SDATA.info.channel_labels;
 n_channels = size(data_matrix, 2);
 events = SDATA.events.triggerChannel; % Raw Status Channel vector
 alpha_freq_range = [8, 12]; % Alpha band for filtering (Hz)
-pred_window_s = 0.300; % 100ms pre-stimulus prediction window
-% ---  Event Codes ---
-target_codes = [014, 024]; % Targets: Rhythm Short/Long, Interval Short/Long
-report_unseen_code = 231; % Subjective report code for 'Did Not See'
-report_seen_codes = [232, 233, 234]; % Subjective report codes for 'Saw' (Hit)
-max_target_trials_per_condition = 6; 
+pred_window_s = 0.100; % 200ms pre-stimulus prediction window (used for non-time resolved average across window)
+PRE_EVENT_SEC = 0.9; %taking all time since warning signal 
+POST_EVENT_SEC = 0.3;
+total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
+erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
+pre_samples = round(PRE_EVENT_SEC * Fs);
+pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410 at 1024Hz
+pred_end_sample = pre_samples;
+% ---  Event Codes --- %
+target_codes = [013, 014, 015, 023, 024, 025]; % Targets: Rhythm Target Contrast 4,5,6 Right, same but Left (contrasts around threshold) 
+report_unseen_code = 231; % Subjective report code for 'Did Not See' for rhythm
+report_seen_codes = [232, 233, 234]; % Subjective report codes for 'Saw' (Hit) for rhythm
+max_target_trials_per_condition = 1000; 
+cz_channel_idx = 48; %take Oz better it's 29, (Cz was 48)
 
 
 %% 1.1 Finding trials of interest
@@ -75,7 +83,7 @@ for i = 1:length(trigger_codes)
         found_report = false;
         
         % Search the next few indices (up to end of response window)
-        for j = i + 1 : min(i + 10, length(trigger_codes)) 
+        for j = i + 1 : min(i + 4, length(trigger_codes)) % i+4 is because subj response is the fourth event after a target showing
             report_code = trigger_codes(j);
             
             if ismember(report_code, [report_unseen_code, report_seen_codes])
@@ -119,8 +127,8 @@ for code = target_codes
 end
 disp('---------------------------------------');
 
-%% Optional: 1.2 Taking less trials to run stuff quickly
-
+% Optional: 1.2 Taking less trials to run stuff quickly (controlled by
+% max_target_trials_per_condition
 
 % --- 1. Initialize Storage for Sampled Indices ---
 sampled_indices_cell = cell(1, length(target_codes));
@@ -156,52 +164,50 @@ n_trials = length(final_sample_indices);
 disp(['Selected ' num2str(n_trials) ' total trials for analysis.']);
 
 
-%% 2. ALPHA POWER EXTRACTION (Filter, Hilbert, Extract Envelope)
-
-% --- Configuration ---
-PRE_EVENT_SEC = 0.5; 
-POST_EVENT_SEC = 0.3;
-total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
-erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
-
-% --- 1. Bandpass Filter (Alpha 8-12 Hz) ---
-filter_order = 3; 
-[b, a] = butter(filter_order, alpha_freq_range / (Fs/2));
-data_filtered_alpha = filtfilt(b, a, double(data_matrix)); 
-
-% --- 2. Epoching the Filtered Data ---
-pre_samples = round(PRE_EVENT_SEC * Fs);
-all_epochs_alpha = zeros(total_epoch_samples, n_channels, n_trials);
-
-for trial_idx = 1:n_trials
-    center_idx = epoch_latencies(trial_idx); 
-    
-    % The correct calculation for start and end indices:
-    start_idx = center_idx - pre_samples;
-    end_idx = start_idx + total_epoch_samples - 1; % Total length should be total_epoch_samples
-    
-    if start_idx >= 1 && end_idx <= size(data_matrix, 1)
-        
-        % Extract the segment
-        % The right side is [end_idx - start_idx + 1] samples long.
-        % This must equal total_epoch_samples (819).
-        all_epochs_alpha(:, :, trial_idx) = data_filtered_alpha(start_idx:end_idx, :);
-    end
-end
-
-disp('Alpha-band epoching complete.');
-
-
-% --- 3. Hilbert Transform and Power Calculation ---
-alpha_analytic = hilbert(all_epochs_alpha);
-% Power is magnitude squared, often log-transformed (we use simple power here)
-alpha_power_envelope = abs(alpha_analytic).^2;
+% %% 2. ALPHA POWER EXTRACTION (Filter, Hilbert, Extract Envelope) 
+% 
+% % --- Configuration ---
+% PRE_EVENT_SEC = 0.9; 
+% POST_EVENT_SEC = 0.3;
+% total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
+% erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
+% 
+% % --- 1. Bandpass Filter (Alpha 8-12 Hz) ---
+% filter_order = 3; 
+% [b, a] = butter(filter_order, alpha_freq_range / (Fs/2));
+% data_filtered_alpha = filtfilt(b, a, double(data_matrix)); 
+% 
+% % --- 2. Epoching the Filtered Data ---
+% pre_samples = round(PRE_EVENT_SEC * Fs);
+% all_epochs_alpha = zeros(total_epoch_samples, n_channels, n_trials);
+% 
+% for trial_idx = 1:n_trials
+%     center_idx = epoch_latencies(trial_idx); 
+% 
+%     % The correct calculation for start and end indices:
+%     start_idx = center_idx - pre_samples;
+%     end_idx = start_idx + total_epoch_samples - 1; % Total length should be total_epoch_samples
+% 
+%     if start_idx >= 1 && end_idx <= size(data_matrix, 1)
+% 
+%         % Extract the segment
+%         % The right side is [end_idx - start_idx + 1] samples long.
+%         % This must equal total_epoch_samples (819).
+%         all_epochs_alpha(:, :, trial_idx) = data_filtered_alpha(start_idx:end_idx, :);
+%     end
+% end
+% 
+% disp('Alpha-band epoching complete.');
+% 
+% 
+% % --- 3. Hilbert Transform and Power Calculation ---
+% alpha_analytic = hilbert(all_epochs_alpha);
+% % Power is magnitude squared, often log-transformed (we use simple power here)
+% alpha_power_envelope = abs(alpha_analytic).^2;
 
 %% 2.bis ALPHA POWER EXTRACTION (Lab's TFhilbert Method)
 
 % --- Configuration ---
-PRE_EVENT_SEC = 0.5; 
-POST_EVENT_SEC = 0.3;
 total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
 erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
 
@@ -225,6 +231,45 @@ for trial_idx = 1:n_trials
     end
 end
 disp('Alpha-band epoching complete.');
+
+%2.bis.0: TRIAL ARTIFACT REJECTION (Sample Masking to Trial Rejection)
+
+disp('Applying trial-level artifact rejection...');
+
+% --- 1. Prepare Artifact Mask ---
+% Get the continuous artifact mask (N_time_points x 1 vector)
+artifact_mask_cont = SDATA.metadata.artifacts; 
+
+% 2. Initialize a logical vector to mark bad trials
+is_good_trial = true(n_trials, 1); 
+
+% 3. The Rejection Loop: Check every trial segment
+for trial_idx = 1:n_trials
+    
+    center_idx = epoch_latencies(trial_idx); 
+    start_idx = center_idx - pre_samples;
+    end_idx = start_idx + total_epoch_samples - 1;
+    
+    % Check the continuous artifact mask in the time window of the current trial
+    trial_artifact_segment = artifact_mask_cont(start_idx:end_idx);
+    
+    % If ANY sample in this segment is marked '1' (artifact), the whole trial is BAD.
+    if any(trial_artifact_segment) 
+        is_good_trial(trial_idx) = false;
+    end
+end
+
+% --- 4. Apply Rejection to Data and Labels ---
+disp(['Rejected ' num2str(sum(~is_good_trial)) ' trials due to artifacts.']);
+
+% Filter all trial-dependent variables to keep only good trials:
+all_epochs_alpha = all_epochs_alpha(:, :, is_good_trial);
+epoch_latencies = epoch_latencies(is_good_trial);
+epoch_codes = epoch_codes(is_good_trial);
+y_subjective_outcome = y_subjective_outcome(is_good_trial);
+n_trials = sum(is_good_trial); % Update the total trial count
+
+disp(['Final N for analysis: ' num2str(n_trials)]);
 
 % --- 2. TFhilbert Call (CRITICAL DIMENSIONAL SWAP) ---
 % The function processes trials sequentially. We must process each channel across all trials.
@@ -252,15 +297,64 @@ end
 
 disp('TFhilbert processing complete. Power envelope calculated.');
 
+%2.1 Visualising alpha-power time-courses for all trials
+
+%% 2.bis.1: PLOT SINGLE-TRIAL & COMPARISON AVERAGES
+
+time_vec_full_epoch = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
+time_vec_sec = time_vec_full_epoch(1:pred_end_sample);
+
+alpha_power_3D_avg_freq = squeeze(mean(alpha_power_envelope, 2)); % Result: [Time x Channels x Trials]
+
+% 2. Slice to get the specific Channel (Cz proxy)
+% Result: [Time x Trials]
+power_traces = squeeze(alpha_power_3D_avg_freq(:, cz_channel_idx, :));
+
+% --- Find Indices for Grouping ---
+idx_seen = (y_subjective_outcome == 1);
+idx_unseen = (y_subjective_outcome == 0);
+
+% --- Calculate Group Averages (Crucial Step) ---
+% Average across the Trial dimension (Dimension 2 of power_traces)
+Avg_Seen_Power = mean(power_traces(:, idx_seen), 2);
+Avg_Unseen_Power = mean(power_traces(:, idx_unseen), 2);
+
+figure('Units', 'normalized', 'Position', [0.1 0.1 0.6 0.8]); % Opens a tall, single figure
+
+% --- SUBPLOT 1 (Top): ALL SINGLE TRIALS + GRAND AVERAGE ---
+subplot(2, 1, 1);
+plot(time_vec_full_epoch, power_traces, 'Color', [0.7 0.7 0.7], 'LineWidth', 0.5); % All trials (gray)
+hold on;
+plot(time_vec_full_epoch, mean(power_traces, 2), 'k', 'LineWidth', 3.0, 'DisplayName', 'Grand Average'); % Grand Average (thick black)
+line([0 0], ylim, 'Color', 'r', 'LineStyle', '--','DisplayName', 'Target Onset' );
+xlim([-PRE_EVENT_SEC, POST_EVENT_SEC]);
+title('Individual Trial Power Traces (All Selected Trials)', 'FontSize', 12);
+ylabel('Alpha Power (\muV^2)');
+%legend('show', 'Location', 'NorthWest');
+hold off;
+
+
+% --- SUBPLOT 2 (Bottom): SEEN vs. UNSEEN COMPARISON ---
+subplot(2, 1, 2);
+plot(time_vec_full_epoch, Avg_Seen_Power, 'b', 'LineWidth', 3, 'DisplayName', 'SEEN Trials');
+hold on;
+plot(time_vec_full_epoch, Avg_Unseen_Power, 'r', 'LineWidth', 3, 'DisplayName', 'UNSEEN Trials');
+line([0 0], ylim, 'Color', 'k', 'LineStyle', '--');
+line(xlim, [0 0], 'Color', [0.5 0.5 0.5], 'LineStyle', ':', 'DisplayName', 'Target Onset');
+xlim([-PRE_EVENT_SEC, POST_EVENT_SEC]);
+title('Average Alpha Power: Seen vs. Unseen Comparison', 'FontSize', 12);
+xlabel('Time relative to stimulus (s)');
+ylabel('Alpha Power (\muV^2)');
+legend('show', 'Location', 'SouthEast');
+hold off;
+
 
 %% 3. FEATURE EXTRACTION AND HYPOTHESIS TESTING
 
 % --- 1. Define the Prediction Window ---
-pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410 at 1024Hz
+pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 820 for last 100ms at 1024Hz
 pred_end_sample = pre_samples; % sample 512 (0ms)
 
-% --- 2. Define the Alpha ROI (Cz proxy) ---
-cz_channel_idx = 48; 
 
 % --- 3. Extract the Single-Trial Predictor (X) ---
 % Average the Alpha power across the time window and the Pz channel for each trial.
@@ -286,7 +380,7 @@ alpha_missed_power = alpha_power_predictor(y_subjective_outcome == 0);
 disp('--- Running T-Test (Seen vs. Unseen) ---');
 if length(alpha_seen_power) > 1 && length(alpha_missed_power) > 1
     
-    [h, p, ci, stats] = ttest2(alpha_seen_power, alpha_missed_power);
+    [h, p, ci, stats] = ttest2(alpha_seen_power, alpha_missed_power, "Tail","Left"); %make sure about tail left
     
     disp(['T-Test Result:']);
     disp(['   Mean Power (Seen): ' num2str(mean(alpha_seen_power), 3)]);
@@ -298,6 +392,7 @@ if length(alpha_seen_power) > 1 && length(alpha_missed_power) > 1
     scatter(alpha_power_predictor, y_subjective_outcome, 50, 'filled');
     title('Single-Trial Alpha Power Predicting Subjective Outcome (0=Miss, 1=Seen)');
     xlabel(['Alpha Power (Avg ' num2str(pred_window_s*1000) 'ms pre-stim)']);
+    %set(gca, 'XDir', 'reverse'); % Negative Upward\
     ylabel('Subjective Outcome');
     ylim([-0.1 1.1]);
     
@@ -331,7 +426,7 @@ disp(['Running time-resolved T-test across ' num2str(time_window_samples) ' time
 tic
 
 % --- 4. THE TIME-RESOLVED LOOP ---
-for t_idx = 1:time_window_samples
+for t_idx = 1:pred_end_sample
     
     % --- A. Extract Predictor for the current time point ---
     % Squeeze removes single dimensions. We take only the current time index (t_idx).
@@ -350,7 +445,7 @@ for t_idx = 1:time_window_samples
     % --- C. Run T-Test ---
     if length(alpha_seen_power) > 1 && length(alpha_missed_power) > 1
         % ttest2 returns the p-value first, then the stats structure
-        [h, p_val, ~, stats] = ttest2(alpha_seen_power, alpha_missed_power);
+        [h, p_val, ~, stats] = ttest2(alpha_seen_power, alpha_missed_power, "Tail", "Left");
         
         t_map_vector(t_idx) = stats.tstat;
         p_map_vector(t_idx) = p_val;
@@ -367,20 +462,31 @@ disp('Time-resolved T-map computation finished.');
 figure;
 
 % --- 1. Plot the T-statistic over time ---
-plot(time_vec_pred, t_map_vector, 'b', 'LineWidth', 2);
+plot(time_vec_sec, t_map_vector, 'b', 'LineWidth', 2);
 hold on;
 
 % --- 2. Add Significance Threshold (Alpha = 0.05) ---
 % We calculate the threshold based on the T-distribution degrees of freedom (N_trials - 2)
 df = n_trials - 2;
 if df > 0
-    t_critical_pos = tinv(0.975, df); % T-value for p < 0.05 two-tailed
-    t_critical_neg = tinv(0.025, df);
+% T-value for p < 0.05, one-tailed (lower tail check)
+    t_critical_neg = tinv(0.05, df); 
     
-    % Plot horizontal significance lines
-    line(xlim, [t_critical_pos t_critical_pos], 'Color', 'r', 'LineStyle', ':');
+    % Only plot the critical negative line (or both if you want the boundary)
     line(xlim, [t_critical_neg t_critical_neg], 'Color', 'r', 'LineStyle', ':');
 end
+
+% --- 4. Plotting Significance Markers ---
+% Find indices where P-value is significant (p < 0.05)
+significant_indices = (p_map_vector < 0.05);
+
+% Extract the time points and T-values ONLY at significant locations
+significant_t_values = t_map_vector(significant_indices);
+significant_time_points = time_vec_pred(significant_indices);
+
+% Plot black circles (markers) at significant locations
+scatter(significant_time_points, significant_t_values, 50, 'k', 'filled');
+% 50 is marker size, 'k' is color (black), 'filled' makes it solid.
 
 % --- 3. Aesthetics ---
 line([0 0], ylim, 'Color', 'k', 'LineStyle', '--'); % Vertical line at stimulus onset
@@ -432,7 +538,7 @@ for f_idx = 1:n_freqs % Outer Loop: Iterate through each of the 5 frequencies
         
         % --- C. Run T-Test (Prediction Test) ---
         if length(alpha_seen_power) > 1 && length(alpha_missed_power) > 1
-            [h, p_val, ~, stats] = ttest2(alpha_seen_power, alpha_missed_power);
+            [h, p_val, ~, stats] = ttest2(alpha_seen_power, alpha_missed_power, "Tail", "Left");
             
             % Store the T-statistic and P-value in the matrix
             t_map_matrix(t_idx, f_idx) = stats.tstat;
@@ -451,24 +557,38 @@ disp('Time-Frequency T-map computation finished.');
 
 figure('Name', 'Predictive T-Map');
 
-% --- Configuration for Plot Axes ---
-time_vec_pred = time_points(pred_start_sample_idx : pred_end_sample_idx);
-freq_vec = [8:12]; % We only analyzed 8, 10, 12 Hz, so we use the range for plotting.
-if length(freq_vec) > n_freqs % Adjust if the simple [8:12] is too long for the 5 freqs
-    freq_vec = linspace(alpha_freq_range(1), alpha_freq_range(2), n_freqs);
-end
+% --- 1. Plot the T-statistic over time ---
+% You must run the imagesc plot in a previous cell or ensure the setup is run first.
+% Assuming this section is now for the Time-Frequency Map (Section 5.0).
+% We will use a consistent plot approach.
+time_vec_sec = time_vec_full_epoch(1:pred_end_sample);
 
-% --- Plotting the T-Map ---
-imagesc(time_vec_pred, freq_vec, t_map_matrix'); 
-% CRITICAL: Transpose t_map_matrix' for imagesc: [Freq x Time]
+freq_vec = linspace(alpha_freq_range(1), alpha_freq_range(2), n_freqs);
 
-axis xy; % Corrects the Y-axis direction (low frequencies at bottom)
+% --- A. Plotting the T-Map (The Colored Surface) ---
+imagesc(time_vec_sec, freq_vec, t_map_matrix'); 
+axis xy; 
 colorbar;
-caxis([-4 4]); % Standard T-statistic range for visualization
-colormap('jet'); % High-contrast colormap (e.g., 'jet' or 'parula')
+caxis([-4 4]); 
+colormap('jet'); 
+hold on; % <--- CRUCIAL: Tell MATLAB to layer the next plot!
 
-% --- Aesthetics ---
-line([0 0], ylim, 'Color', 'k', 'LineWidth', 2, 'LineStyle', '--'); % Vertical line at stimulus onset
-title(['Time-Frequency T-Map (Alpha Power Predicts Awareness) at Ch ' num2str(cz_channel_idx)]);
+% --- B. Adding Significance Contour (Middle Layer) ---
+% 1. Create a logical mask for significance (p < 0.05)
+% NOTE: We assume the target is p < 0.05, but we use p < 0.5 for demonstration 
+% if your true p-values are high due to low N.
+significant_mask = (p_map_matrix' < 0.05); 
+
+% 2. Plot the contour lines using the mask
+[~, h_contour] = contour(time_vec_sec, freq_vec, significant_mask, [0.5 0.5], 'LineWidth', 3, 'LineColor', 'k');
+
+% --- C. Aesthetics and Markers (Top Layer) ---
+line([0 0], ylim, 'Color', 'k', 'LineWidth', 2, 'LineStyle', '--'); 
+title(['Time-Frequency T-Map (P < 0.05 Contoured)'], 'FontSize', 14);
+
+% --- CRUCIAL FINAL STEPS ---
+%set(gca, 'XDir', 'reverse'); % Sets Time direction to flow backward 
 xlabel('Time relative to stimulus (s)');
 ylabel('Frequency (Hz)');
+grid on;
+hold off; % Release the figure
