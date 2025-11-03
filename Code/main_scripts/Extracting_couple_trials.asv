@@ -179,43 +179,10 @@ disp(['Selected ' num2str(n_trials) ' total trials for analysis.']);
 
 %% 2.1 ALPHA POWER EXTRACTION (Lab's TFhilbert Method)
 
-% --- Configuration for Padding ---
-LOWEST_FREQ = alpha_freq_range(1); % Get the lowest frequency (8 Hz)
-PAD_CYCLES = 2; % Standard practice: Pad by 2 cycles of the lowest frequency
-PAD_SAMPLES = round(PAD_CYCLES * Fs / LOWEST_FREQ); % Calculate samples needed for padding
-disp(['Padding ' num2str(PAD_SAMPLES) ' samples (' num2str(PAD_SAMPLES/Fs, 2) 's) per side for edge artifact control.']);
-
-total_epoch_samples_padded = total_epoch_samples + 2 * PAD_SAMPLES; % New, larger size
-% ... (rest of the initial config) ...
-
-% --- 1. Epoching the Clean Data (Output: [Time x Channels x Trials]) ---
-pre_samples_padded = pre_samples + PAD_SAMPLES; % Shift the effective 0ms point
-all_epochs_alpha = zeros(total_epoch_samples_padded, n_channels, n_trials); % Initialize larger array
-
-for trial_idx = 1:n_trials
-    center_idx = epoch_latencies(trial_idx); 
-    
-    % *** NEW START/END CALCULATION ***
-    start_idx = center_idx - pre_samples_padded; % Start earlier
-    end_idx = start_idx + total_epoch_samples_padded - 1; % End later
-    
-    % Safety check: ensure indices are within bounds
-    if start_idx >= 1 && end_idx <= size(data_matrix, 1)
-        % Extract the segment (the right side is the padded time window)
-        all_epochs_alpha(:, :, trial_idx) = data_matrix(start_idx:end_idx, :);
-    else
-        % --- If the trial is too close to the file edge, use mirroring/zero padding here.
-        % For simplicity in this script, we will skip padding for boundary trials.
-        % This is where complex logic for mirroring data would go.
-    end
-end
-disp('Alpha-band epoching complete and padded.');
-
 % --- Configuration ---
 total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs); %add stuff then chop it
 erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
 
-%% SKIP FOR NOW original 2.1
 
 % We analyze only the single Alpha band (8-12 Hz) for this single-trial test.
 frequencies_to_analyze = [alpha_freq_range(1): alpha_freq_range(2)]; % Use 10 Hz as the center frequency
@@ -236,8 +203,6 @@ for trial_idx = 1:n_trials
     end
 end
 disp('Alpha-band epoching complete.');
-
-%%
 
 %2.bis.0: TRIAL ARTIFACT REJECTION (Sample Masking to Trial Rejection)
 
@@ -287,7 +252,7 @@ disp(['Final N for analysis: ' num2str(n_trials)]);
 % over the channels, processing time across trials.
 
 % Initialize the final power envelope matrix [Time x Channels x Trials]
-alpha_power_envelope = zeros(total_epoch_samples_padded, length(frequencies_to_analyze), n_channels, n_trials);
+alpha_power_envelope = zeros(total_epoch_samples, length(frequencies_to_analyze), n_channels, n_trials);
 
 for ch = 1:n_channels
     % Extract all time courses for the current channel across all trials: [Time x 1 x Trials]
@@ -303,19 +268,6 @@ for ch = 1:n_channels
 end
 
 disp('TFhilbert processing complete. Power envelope calculated.');
-
-% --- TRIMMING STEP (MUST OCCUR AFTER TFhilbert) ---
-disp('Trimming edge padding...');
-
-% Define the samples to keep (from sample PAD_SAMPLES + 1 up to the end minus PAD_SAMPLES)
-start_trim_idx = PAD_SAMPLES + 1;
-end_trim_idx = total_epoch_samples_padded - PAD_SAMPLES;
-
-% Slice the power envelope to remove the padding in the Time dimension (Dimension 1)
-alpha_power_envelope = alpha_power_envelope(start_trim_idx:end_trim_idx, :, :, :);
-
-% Verify the size is back to normal (total_epoch_samples)
-disp(['Final time points after trimming: ' num2str(size(alpha_power_envelope, 1))]);
 
 % %% 2.2 BASELINE NORMALIZATION (Power Dynamics)
 % 
