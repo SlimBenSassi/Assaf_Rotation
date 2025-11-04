@@ -33,6 +33,9 @@ catch ME
     error('Aborting due to critical data loading failure.');
 end
 
+
+
+
 %% --- Global Variables ---
 
 Fs = SDATA.info.sampling_rate;
@@ -53,9 +56,14 @@ pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410
 pred_end_sample = pre_samples;
 
 % ---  Event Codes --- %
-target_codes = [ 014, 015, 016,  024, 025, 026]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
-report_unseen_code = 231; % Subjective report code for 'Did Not See' for rhythm
-report_seen_codes = [232, 233, 234]; % Subjective report codes for 'Saw' (Hit) for rhythm
+target_codes = [012, 013, 014, 015, 016, 022, 023, 024, 025, 026, 212, 213, 214, 215, 216, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
+%target_codes = [014, 015, 016, 024, 025, 026, 214, 215, 216, 224, 225, 226];
+%targer_codes = [014, 015, 016, 024, 025, 026];
+report_unseen_code = [231, 241]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
+report_seen_codes = [232, 233, 234, 242, 243, 244]; % Subjective report
+%codes for 'Saw' (Hit) for rhythm 232, for interval 242
+%report_seen_codes = [232, 233, 234];
+
 max_target_trials_per_condition = 1000; 
 
 % --- Channels --- %
@@ -68,7 +76,27 @@ current_ROI_cell = ROI.Occipital;
 currentROI = current_ROI_cell{1};
 currentROI_name = current_ROI_cell{2};
 
+%% 0. Rereferencing in case data is in mastoids reference to amplify occipital signals
 
+% --- CONDITIONAL RE-REFERENCE FIX (M-to-N) ---
+if isequal(SDATA.metadata.reference, [69, 70])
+    % 1. Calculate the current reference signal (Average of M1 and M2 - Channels 69 and 70)
+    current_ref_signal = mean(SDATA.data(:, [69, 70]), 2);
+    
+    % 2. Calculate the difference between the Nose electrode (new reference) and the old reference
+    nose_to_mastoid_diff = SDATA.data(:, 71) - current_ref_signal;
+    
+    % 3. Apply the re-reference: Subtract the difference from ALL channels.
+    % This effectively changes the reference point for all data to the Nose electrode (Channel 71).
+    SDATA.data = SDATA.data - nose_to_mastoid_diff;
+    
+    % 4. Update the metadata log
+    SDATA.metadata.reference = [71];
+    disp('Reference changed from Mastoids to Nose.');
+else
+    disp(['Data reference (' SDATA.metadata.reference ') retained.']);
+end
+% ---------------------------------------------
 %% 1.1 Finding trials of interest
 
 % --- 1. Extract Latencies and Codes from the Status Channel ---
@@ -108,7 +136,7 @@ for i = 1:length(trigger_codes)
                     final_target_codes = [final_target_codes; current_code];
                     
                     % Determine binary outcome: 1 if Saw (232/233/234), 0 if Unseen (231)
-                    if report_code == report_unseen_code
+                    if ismember(report_code, report_unseen_code)
                         y_subjective_outcome = [y_subjective_outcome; 0]; % Unseen/Miss
                     else
                         y_subjective_outcome = [y_subjective_outcome; 1]; % Seen/Hit
@@ -217,25 +245,22 @@ erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
 
 %% SKIP FOR NOW original 2.1
 
-% We analyze only the single Alpha band (8-12 Hz) for this single-trial test.
-frequencies_to_analyze = [alpha_freq_range(1): alpha_freq_range(2)]; % Use 10 Hz as the center frequency
-filt_width_octaves = 0.2; 
-causalFilt = false; % Use zero-phase filtering
 
-% --- 1. Epoching the Clean Data (Output: [Time x Channels x Trials]) ---
-pre_samples = round(PRE_EVENT_SEC * Fs);
-all_epochs_alpha = zeros(total_epoch_samples, n_channels, n_trials);
 
-for trial_idx = 1:n_trials
-    center_idx = epoch_latencies(trial_idx); 
-    start_idx = center_idx - pre_samples;
-    end_idx = start_idx + total_epoch_samples - 1;
-    
-    if start_idx >= 1 && end_idx <= size(data_matrix, 1)
-        all_epochs_alpha(:, :, trial_idx) = data_matrix(start_idx:end_idx, :);
-    end
-end
-disp('Alpha-band epoching complete.');
+% % --- 1. Epoching the Clean Data (Output: [Time x Channels x Trials]) ---
+% pre_samples = round(PRE_EVENT_SEC * Fs);
+% all_epochs_alpha = zeros(total_epoch_samples, n_channels, n_trials);
+% 
+% for trial_idx = 1:n_trials
+%     center_idx = epoch_latencies(trial_idx); 
+%     start_idx = center_idx - pre_samples;
+%     end_idx = start_idx + total_epoch_samples - 1;
+% 
+%     if start_idx >= 1 && end_idx <= size(data_matrix, 1)
+%         all_epochs_alpha(:, :, trial_idx) = data_matrix(start_idx:end_idx, :);
+%     end
+% end
+% disp('Alpha-band epoching complete.');
 
 %%
 
@@ -263,11 +288,14 @@ for trial_idx = 1:n_trials
     % If ANY sample in this segment is marked '1' (artifact), the whole trial is BAD.
     if any(trial_artifact_segment) 
         is_good_trial(trial_idx) = false;
+        disp(center_idx)
+
     end
 end
 
 % --- 4. Apply Rejection to Data and Labels ---
 disp(['Rejected ' num2str(sum(~is_good_trial)) ' trials due to artifacts.']);
+
 
 % Filter all trial-dependent variables to keep only good trials:
 all_epochs_alpha = all_epochs_alpha(:, :, is_good_trial);
@@ -285,6 +313,12 @@ disp(['Final N for analysis: ' num2str(n_trials)]);
 
 % The function expects [Trials/Channels x Time]. We will call it in a simple loop 
 % over the channels, processing time across trials.
+
+% We analyze only the single Alpha band (8-12 Hz) for this single-trial test.
+frequencies_to_analyze = [alpha_freq_range(1): alpha_freq_range(2)]; % Use 10 Hz as the center frequency
+filt_width_octaves = 0.2; 
+causalFilt = false; % Use zero-phase filtering
+
 
 % Initialize the final power envelope matrix [Time x Channels x Trials]
 alpha_power_envelope = zeros(total_epoch_samples_padded, length(frequencies_to_analyze), n_channels, n_trials);
@@ -376,8 +410,8 @@ hold on;
 plot(time_vec_full_epoch, mean(power_traces, 2), 'k', 'LineWidth', 3.0, 'DisplayName', 'Grand Average'); % Grand Average (thick black)
 line([0 0], ylim, 'Color', 'r', 'LineStyle', '--','DisplayName', 'Target Onset' );
 xlim([-PRE_EVENT_SEC, POST_EVENT_SEC]);
-title(['Individual Trial Power Traces (All Selected Trials)- Ch: ' num2str(currentROI_name)], 'FontSize', 12);
-ylabel('Alpha Power (\muV^2)');
+title(['Individual Trial Alpha Amplitude Traces (All Selected Trials)- Ch: ' num2str(currentROI_name)], 'FontSize', 12);
+ylabel('Alpha Amplitude (\muV)');
 legend('show', 'Location', 'NorthWest');
 hold off;
 
@@ -390,10 +424,10 @@ plot(time_vec_full_epoch, Avg_Unseen_Power, 'r', 'LineWidth', 3, 'DisplayName', 
 line([0 0], ylim, 'Color', 'k', 'LineStyle', '--', 'DisplayName', 'Target Onset');
 %line(xlim, [0 0], 'Color', [0.5 0.5 0.5], 'LineStyle', ':');
 xlim([-PRE_EVENT_SEC, POST_EVENT_SEC]);
-title(['Average Alpha Power: Seen vs. Unseen Comparison - Ch: ' num2str(currentROI_name)] , 'FontSize', 12);
+title(['Average Alpha Amplitude: Seen vs. Unseen Comparison - Ch: ' num2str(currentROI_name)] , 'FontSize', 12);
 xlabel('Time relative to stimulus (s)');
-ylabel('Alpha Power (\muV^2)');
-legend('show', 'Location', 'SouthEast');
+ylabel('Alpha Amplitude (\muV)');
+legend('show', 'Location', 'NorthEast');
 hold off;
 
 
@@ -570,6 +604,7 @@ line(xlim, [0 0], 'Color', [0.5 0.5 0.5], 'LineStyle', '-'); % Horizontal line a
 title(['Time-Resolved T-Map (Alpha Power: Seen vs. Unseen) - Ch: ' num2str(currentROI_name)]);
 xlabel('Time relative to stimulus (s)');
 ylabel('T-Statistic (Predictive Strength)');
+legend()
 grid on;
 hold off;
 

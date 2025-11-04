@@ -1,0 +1,28 @@
+%% 1. INITIALIZATION AND FILE SELECTION
+
+clear; close all; clc
+disp('--- Starting Multi-Subject Data Aggregation for GLMM ---');
+
+
+% --- Configuration ---
+DEFAULT_PATH = 'C:\Users\ssassi\Desktop\Assaf_Rotation\Data'; % Default folder where your processed data is saved
+%example christina data: \\wks3\pr_breska\el-Christina\Backup Copy Christina\PF_Poster\Data\EEG\
+% christina eeg trigger list "\\wks3\pr_breska\el-Christina\SxA\SxA_Data\EEGTriggerList.docx"
+
+
+
+% 1. Use uigetfile to select multiple subjects' result files
+[filenames, filepath] = uigetfile({'*.mat','MATLAB Data File (*.mat)' ;'*.*', 'All files (*.*)'},...
+                                    'Select All Subject Alpha Results Files', DEFAULT_PATH, 'MultiSelect', 'on');
+
+if isequal(filenames, 0)
+    disp('No files selected. Aborting.');
+    return; 
+end
+
+if ~iscell(filenames)
+    filenames = {filenames};
+end
+
+N_SUBJECTS = length(filenames);
+disp(['Selected ' num2str(N_SUBJECTS) ' subject files. Proceeding to loop...']);
