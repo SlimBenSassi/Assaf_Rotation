@@ -46,7 +46,7 @@ events = SDATA.events.triggerChannel; % Raw Status Channel vector
 alpha_freq_range = [8, 12]; % Alpha band for filtering (Hz)
 
 % --- Time Variables --- %
-pred_window_s = 0.100; % 200ms pre-stimulus prediction window (used for non-time resolved average across window)
+pred_window_s = 0.400; % 100ms pre-stimulus prediction window (used for non-time resolved average across window)
 PRE_EVENT_SEC = 0.9; %taking all time since warning signal 
 POST_EVENT_SEC = 0.3;
 total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
@@ -115,7 +115,7 @@ final_target_latencies = [];
 final_target_codes = [];
 y_subjective_outcome = []; % 0 = Unseen (Miss), 1 = Seen (Hit)
 
-search_window = round(10 * Fs); % Search up to 10ms after target for response
+search_window = round(10 * Fs); % Search up to 10s after target for response
 
 for i = 1:length(trigger_codes)
     current_code = trigger_codes(i);
@@ -177,7 +177,7 @@ disp('---------------------------------------');
 
 % --- 1. Initialize Storage for Sampled Indices ---
 sampled_indices_cell = cell(1, length(target_codes));
-disp('--- Optional: Taking less trials to run stuff quickly ---');
+disp('--- Optional: Taking less trials to run stuff quickly ---');y_su
 
 % --- 2. Loop Through Each Target Code ---
 for i = 1:length(target_codes)
@@ -200,17 +200,39 @@ end
 % Vertically stack all sampled indices into one master list
 final_sample_indices = vertcat(sampled_indices_cell{:});
 
+%% Selecting trials of interest
+
+[epoch_latencies, epoch_codes, intensities, y_subjective_outcome, n_trials] = select_single_trials(SDATA, target_codes, report_unseen_code, report_seen_codes);
+
+%% Rejecting trials of interests that contain artifacts
+
+[epoch_latencies, epoch_codes, y_subjective_outcome, n_trials] = reject_artifact_trials(SDATA, epoch_latencies, epoch_codes, y_subjective_outcome, total_epoch_samples, pre_samples);
+
+%% Epoching with padding
+
+all_epochs_alpha_padded = epoch_with_padding(data_matrix, Fs, n_channels, n_trials, epoch_latencies, total_epoch_samples, pred_end_sample, alpha_freq_range);
+
+%% Time-frequency Analysis and trimming
+
+alpha_power_envelope = tf_and_trim(all_epochs_alpha_padded, Fs, alpha_freq_range);
+
+
+%% SKIP for now (functionized above)
+
 % Final Trial Data is sliced using the master list
 epoch_latencies = final_target_latencies(final_sample_indices);
 epoch_codes = final_target_codes(final_sample_indices);
 y_subjective_outcome = y_subjective_outcome(final_sample_indices);
 
 n_trials = length(final_sample_indices);
+
 disp(['Selected ' num2str(n_trials) ' total trials for analysis.']);
 
 
 
-%% 2.1 ALPHA POWER EXTRACTION (Lab's TFhilbert Method)
+
+
+%% SKIP FOR NOW (functionalized) 2.1 ALPHA POWER EXTRACTION (Lab's TFhilbert Method)
 
 % --- Configuration for Padding ---
 LOWEST_FREQ = alpha_freq_range(1); % Get the lowest frequency (8 Hz)
@@ -267,7 +289,7 @@ erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
 % end
 % disp('Alpha-band epoching complete.');
 
-%%
+%% SKIP (functionalized above)
 
 %2.bis.0: TRIAL ARTIFACT REJECTION (Sample Masking to Trial Rejection)
 
@@ -279,6 +301,8 @@ artifact_mask_cont = SDATA.metadata.artifacts;
 
 % 2. Initialize a logical vector to mark bad trials
 is_good_trial = true(n_trials, 1); 
+
+
 
 % 3. The Rejection Loop: Check every trial segment
 for trial_idx = 1:n_trials
@@ -310,6 +334,8 @@ y_subjective_outcome = y_subjective_outcome(is_good_trial);
 n_trials = sum(is_good_trial); % Update the total trial count
 
 disp(['Final N for analysis: ' num2str(n_trials)]);
+
+%% SKIP FOR NOW (functionalized)
 
 % --- 2. TFhilbert Call (CRITICAL DIMENSIONAL SWAP) ---
 % The function processes trials sequentially. We must process each channel across all trials.

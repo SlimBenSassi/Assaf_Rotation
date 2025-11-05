@@ -152,7 +152,6 @@ for sub_idx = 1:N_SUBJECTS
 
 end
 %%
-a = 'siuuu'
 
 %% 3. FINALIZATION AND INSPECTION (Creating the Master Table)
 
@@ -177,13 +176,13 @@ disp('Aggregation complete. Master table created for GLMM.');
 head(MasterTable)
 
 % --- 1. Locate the Repository Root Folder ---
-% We use the 'which' command to find the location of the current script, 
+% We use the which command to find the location of the current script, 
 % then use fileparts() to step back to the repository's root directory.
 script_path = fileparts(which(mfilename)); % Gets the directory of the current running script
 repo_root = fileparts(fileparts(script_path)); % Assumes script is 2 levels down (main_scripts)
 
 % 2. Construct the full path to the 03_RESULTS folder
-RESULTS_DIR = fullfile(repo_root, 'Results'); 
+RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
 final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot.mat');
