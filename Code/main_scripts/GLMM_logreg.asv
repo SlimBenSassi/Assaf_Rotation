@@ -207,7 +207,7 @@ grid on;
 hold off;
 
 
-%% C. DEFINE AND FIT THE GENERALIZED LINEAR MIXED MODEL (GLMM) COMPLEX 2 : with random slopes
+%% C. DEFINE AND FIT THE GENERALIZED LINEAR MIXED MODEL (GLMM) COMPLEX 2 : with random slo
 
 % Define the full model formula (The Core Scientific Test)
 % Model Formula: SubjectiveOutcome (Y) ~ AlphaPower * StimIntensity + (1 + AlphaPower|SubjectID)

@@ -45,7 +45,7 @@ pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410
 pred_end_sample = pre_samples;
 
 % ---  Event Codes --- %
-target_codes = [012, 013, 014, 015, 016, 022, 023, 024, 025, 026, 212, 213, 214, 215, 216, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
+target_codes = [011, 012, 013, 014, 015, 016, 021, 022, 023, 024, 025, 026, 211, 212, 213, 214, 215, 216, 221, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
 %target_codes = [014, 015, 016, 024, 025, 026, 214, 215, 216, 224, 225, 226];
 %target_codes = [014, 015, 016, 024, 025, 026];
 report_unseen_code = [231, 241]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
@@ -108,6 +108,9 @@ for sub_idx = 1:N_SUBJECTS
     data_matrix = SDATA.data;
     n_channels = size(data_matrix, 2);
     
+    % reref to noise if not already
+    SDATA = reref_to_nose(SDATA);
+
     
     % --- C. Trial Selection and Filtering (Function Calls) ---
     % 1. Find and link targets to responses (The complex selection logic)
@@ -140,18 +143,32 @@ for sub_idx = 1:N_SUBJECTS
     current_subjective_outcome = outcomes(:);
     current_stim_intensity = intensities(:);
 
+    disp(unique(intensities));
+
+    % 5. STANDARDIZATION (Z-SCORING WITHIN SUBJECT) for alpha power
+    
+    % Apply Z-score to Alpha Power (X1) and stimintensity
+    current_alpha_power_z = zscore_vector(current_alpha_power);
+    current_stim_intensity_z = zscore_vector(current_stim_intensity);
+
+% --- 6. Append to Master Vectors (The Aggregation) ---
+    % Append the Z-scored versions!
+    all_alpha_power = [all_alpha_power; current_alpha_power_z];
+    all_stim_intensity = [all_stim_intensity; current_stim_intensity_z];
+
     % 4. Append to Master Vectors (The Aggregation) ---
     % NOTE: Subject ID must be stored as a cell array of strings for GLMM.
     all_subject_ids = [all_subject_ids; repmat({subject_id_str}, n_trials, 1)];
-    all_alpha_power = [all_alpha_power; current_alpha_power];
-    all_stim_intensity = [all_stim_intensity; current_stim_intensity];
+    %all_alpha_power = [all_alpha_power; current_alpha_power];
+    %all_stim_intensity = [all_stim_intensity; current_stim_intensity];
     all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome];
     
     disp(['Subject ' subject_id_str ' processed. ' num2str(n_trials) ' trials appended.']);
 % --- END OF SUBJECT LOOP ---
 
 end
-%%
+
+
 
 %% 3. FINALIZATION AND INSPECTION (Creating the Master Table)
 
@@ -178,14 +195,14 @@ head(MasterTable)
 % --- 1. Locate the Repository Root Folder ---
 % We use the which command to find the location of the current script, 
 % then use fileparts() to step back to the repository's root directory.
-script_path = fileparts(which(mfilename)); % Gets the directory of the current running script
-repo_root = fileparts(fileparts(script_path)); % Assumes script is 2 levels down (main_scripts)
+%script_path = fileparts(which(mfilename)); % Gets the directory of the current running script
+%repo_root = fileparts(fileparts(script_path)); % Assumes script is 2 levels down (main_scripts)
 
 % 2. Construct the full path to the 03_RESULTS folder
 RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
-final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot.mat');
+final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot_bigger_zscored.mat');
 
 % 4. Save the table
 save(final_save_path, 'MasterTable', '-v7.3');

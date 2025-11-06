@@ -74,6 +74,7 @@ disp(['Total successfully linked trials: ' num2str(n_trials)]);
 
 for code = target_codes
     count = sum(final_target_codes == code);
+    %disp(final_target_codes);
     % We use an if check to display 0s cleanly (the TODO you mentioned)
     if count > 0 
         disp(['  > Code ' num2str(code) ' found: ' num2str(count) ' trials.']); 

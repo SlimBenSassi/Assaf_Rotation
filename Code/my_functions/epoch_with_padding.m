@@ -25,6 +25,7 @@ pre_samples_padded = pre_samples + PAD_SAMPLES; % Shifted 0ms point
 
 % --- 2. EPOCHING WITH PADDING ---
 disp('Starting padded epoching...');
+
 all_epochs_padded = zeros(total_epoch_samples_padded, n_channels, n_trials); 
 
 for trial_idx = 1:n_trials

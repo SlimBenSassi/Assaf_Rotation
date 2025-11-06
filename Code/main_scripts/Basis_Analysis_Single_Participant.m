@@ -56,7 +56,7 @@ pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410
 pred_end_sample = pre_samples;
 
 % ---  Event Codes --- %
-target_codes = [012, 013, 014, 015, 016, 022, 023, 024, 025, 026, 212, 213, 214, 215, 216, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
+target_codes = [011, 012, 013, 014, 015, 016, 021, 022, 023, 024, 025, 026, 211, 212, 213, 214, 215, 216, 221, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
 %target_codes = [014, 015, 016, 024, 025, 026, 214, 215, 216, 224, 225, 226];
 %targer_codes = [014, 015, 016, 024, 025, 026];
 report_unseen_code = [231, 241]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
@@ -206,7 +206,7 @@ final_sample_indices = vertcat(sampled_indices_cell{:});
 
 %% Rejecting trials of interests that contain artifacts
 
-[epoch_latencies, epoch_codes, y_subjective_outcome, n_trials] = reject_artifact_trials(SDATA, epoch_latencies, epoch_codes, y_subjective_outcome, total_epoch_samples, pre_samples);
+[epoch_latencies, epoch_codes, intensities, y_subjective_outcome, n_trials] = reject_artifact_trials(SDATA, epoch_latencies, epoch_codes, intensities, y_subjective_outcome, total_epoch_samples, pre_samples);
 
 %% Epoching with padding
 
