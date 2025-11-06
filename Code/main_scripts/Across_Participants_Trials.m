@@ -72,6 +72,7 @@ currentROI_name = current_ROI_cell{2};
 % These vectors will accumulate the data from ALL subjects
 all_subject_ids = {};       % Will store subject labels as strings
 all_alpha_power = [];       % Will store the single-trial Alpha power predictor (X1)
+all_stim_intensity_raw = [];    % Will store the Stimulus Intensity RAW
 all_stim_intensity = [];    % Will store the Stimulus Intensity (X2)
 all_subjective_outcome = [];% Will store the binary subjective outcome (Y)
 
@@ -143,8 +144,6 @@ for sub_idx = 1:N_SUBJECTS
     current_subjective_outcome = outcomes(:);
     current_stim_intensity = intensities(:);
 
-    disp(unique(intensities));
-
     % 5. STANDARDIZATION (Z-SCORING WITHIN SUBJECT) for alpha power
     
     % Apply Z-score to Alpha Power (X1) and stimintensity
@@ -155,6 +154,7 @@ for sub_idx = 1:N_SUBJECTS
     % Append the Z-scored versions!
     all_alpha_power = [all_alpha_power; current_alpha_power_z];
     all_stim_intensity = [all_stim_intensity; current_stim_intensity_z];
+    all_stim_intensity_raw = [all_stim_intensity_raw; current_stim_intensity];
 
     % 4. Append to Master Vectors (The Aggregation) ---
     % NOTE: Subject ID must be stored as a cell array of strings for GLMM.
@@ -178,11 +178,11 @@ alpha_predictor_name = strcat('AlphaPower_Avg_', num2str(pred_window_s * 1000), 
 
 
 % 2. Create the VariableNames cell array explicitly
-column_names = {'SubjectiveOutcome', alpha_predictor_name, 'StimIntensity', 'SubjectID'};
+column_names = {'SubjectiveOutcome', alpha_predictor_name, 'StimIntensity', 'StimIntensityRaw', 'SubjectID'};
 
 
 % --- Now the table creation is simplified and robust ---
-MasterTable = table(all_subjective_outcome, all_alpha_power, all_stim_intensity, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
+MasterTable = table(all_subjective_outcome, all_alpha_power, all_stim_intensity, all_stim_intensity_raw, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
 
 
 % 2. Convert SubjectID and Outcome to Categorical/Logical for GLMM (Crucial)
@@ -202,7 +202,7 @@ head(MasterTable)
 RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
-final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot_bigger_zscored.mat');
+final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot_biggest_zscored_and_rawstim.mat');
 
 % 4. Save the table
 save(final_save_path, 'MasterTable', '-v7.3');

@@ -73,6 +73,8 @@ currentROI_name = current_ROI_cell{2};
 all_subject_ids = {};       % Will store subject labels as strings
 all_alpha_power = [];       % Will store the single-trial Alpha power predictor (X1)
 all_stim_intensity = [];    % Will store the Stimulus Intensity (X2)
+all_stim_intensity = [];    % Will store the Stimulus Intensity (X2)
+
 all_subjective_outcome = [];% Will store the binary subjective outcome (Y)
 
 
@@ -149,18 +151,18 @@ for sub_idx = 1:N_SUBJECTS
     
     % Apply Z-score to Alpha Power (X1) and stimintensity
     current_alpha_power_z = zscore_vector(current_alpha_power);
-    current_stim_intensity
+    current_stim_intensity_z = zscore_vector(current_stim_intensity);
 
 % --- 6. Append to Master Vectors (The Aggregation) ---
     % Append the Z-scored versions!
     all_alpha_power = [all_alpha_power; current_alpha_power_z];
-
+    all_stim_intensity = [all_stim_intensity; current_stim_intensity_z];
 
     % 4. Append to Master Vectors (The Aggregation) ---
     % NOTE: Subject ID must be stored as a cell array of strings for GLMM.
     all_subject_ids = [all_subject_ids; repmat({subject_id_str}, n_trials, 1)];
     %all_alpha_power = [all_alpha_power; current_alpha_power];
-    all_stim_intensity = [all_stim_intensity; current_stim_intensity];
+    %all_stim_intensity = [all_stim_intensity; current_stim_intensity];
     all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome];
     
     disp(['Subject ' subject_id_str ' processed. ' num2str(n_trials) ' trials appended.']);
@@ -168,11 +170,7 @@ for sub_idx = 1:N_SUBJECTS
 
 end
 
-% Apply Z-score to Stimulus Intensity (X2) outside loop because inside loop
-% leads to more different values than needed
-all_stim_intensity = zscore_vector(all_stim_intensity);
 
-%%
 
 %% 3. FINALIZATION AND INSPECTION (Creating the Master Table)
 
