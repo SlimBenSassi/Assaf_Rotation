@@ -35,7 +35,7 @@ alpha_freq_range = [8, 12]; % Alpha band for filtering (Hz)
 % --- Time Variables --- %
 Fs = 1024; %change if needed
 n_channels = 71; %change if needed
-pred_window_s = 0.200; % 200ms pre-stimulus prediction window (used for non-time resolved average across window)
+pred_window_s = 0.100; % 200ms pre-stimulus prediction window (used for non-time resolved average across window)
 PRE_EVENT_SEC = 0.5; %taking all time since warning signal 
 POST_EVENT_SEC = 0.1;
 total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
@@ -45,7 +45,7 @@ pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410
 pred_end_sample = pre_samples;
 
 % ---  Event Codes --- %
-target_codes = [011, 012, 013, 014, 015, 016, 021, 022, 023, 024, 025, 026, 211, 212, 213, 214, 215, 216, 221, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
+target_codes = [011, 012, 013, 014, 015, 016, 017, 021, 022, 023, 024, 025, 026, 027, 211, 212, 213, 214, 215, 216, 217, 221, 222, 223, 224, 225, 226, 227]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
 %target_codes = [014, 015, 016, 024, 025, 026, 214, 215, 216, 224, 225, 226];
 %target_codes = [014, 015, 016, 024, 025, 026];
 report_unseen_code = [231, 241]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
@@ -58,7 +58,7 @@ max_target_trials_per_condition = 1000;
 % --- Channels --- %
 single_channel_idx = 48; % Cz=48, Oz=29
 ROI.Central = {[11, 12, 13, 46, 47, 48 ,49], "Central Cluster"};
-ROI.Occipital = {[25, 26, 27, 29, 30, 62, 63, 64], "Occipital Cluster"};
+ROI.Occipital = {[25, 26, 27, 28, 29, 30, 62, 63, 64], "Occipital Cluster"};
 ROI.All = {[1:n_channels], "All Channels"};
 ROI.Single = {[single_channel_idx], num2str(single_channel_idx)}; %put electrode of interest idx in here
 current_ROI_cell = ROI.Occipital;
@@ -202,7 +202,7 @@ head(MasterTable)
 RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
-final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot_biggest_zscored_and_rawstim.mat');
+final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot_biggest_zscored_and_rawstim.2.0.mat');
 
 % 4. Save the table
 save(final_save_path, 'MasterTable', '-v7.3');

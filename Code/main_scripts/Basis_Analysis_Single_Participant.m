@@ -69,7 +69,7 @@ max_target_trials_per_condition = 1000;
 % --- Channels --- %
 single_channel_idx = 48; % Cz=48, Oz=29
 ROI.Central = {[11, 12, 13, 46, 47, 48 ,49], "Central Cluster"};
-ROI.Occipital = {[25, 26, 27, 29, 30, 62, 63, 64], "Occipital Cluster"};
+ROI.Occipital = {[25, 26, 27, 28, 29, 30, 62, 63, 64], "Occipital Cluster"};
 ROI.All = {[1:n_channels], "All Channels"};
 ROI.Single = {[single_channel_idx], num2str(single_channel_idx)}; %put electrode of interest idx in here
 current_ROI_cell = ROI.Occipital;
