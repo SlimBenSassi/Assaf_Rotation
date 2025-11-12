@@ -64,7 +64,7 @@ end
 % --- 4. Finalize Outputs ---
 latencies = final_target_latencies;
 codes = final_target_codes;
-intensities = mod(codes, 10) + 1;
+intensities = mod(codes, 10) + 1 ; 
 outcomes = y_subjective_outcome;
 n_trials = length(latencies);
 

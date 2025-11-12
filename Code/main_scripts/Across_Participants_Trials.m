@@ -45,11 +45,16 @@ pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410
 pred_end_sample = pre_samples;
 
 % ---  Event Codes --- %
-target_codes = [011, 012, 013, 014, 015, 016, 017, 021, 022, 023, 024, 025, 026, 027, 211, 212, 213, 214, 215, 216, 217, 221, 222, 223, 224, 225, 226, 227]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
+%target_codes = [011, 012, 013, 014, 015, 016, 017, 021, 022, 023, 024, 025, 026, 027, 211, 212, 213, 214, 215, 216, 217, 221, 222, 223, 224, 225, 226, 227];  % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
 %target_codes = [014, 015, 016, 024, 025, 026, 214, 215, 216, 224, 225, 226];
 %target_codes = [014, 015, 016, 024, 025, 026];
+target_codes = [010:029 210:229]; %all predictive
 report_unseen_code = [231, 241]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
 report_seen_codes = [232, 233, 234, 242, 243, 244]; % Subjective report
+warning_codes_of_interest = [071 072]; %for irregular
+all_warning_codes = [071, 072, 073];
+%report_unseen_code = [231, 241];
+%report_seen_codes = [23:253];
 %codes for 'Saw' (Hit) for rhythm 232, for interval 242
 %report_seen_codes = [232, 233, 234];
 
@@ -71,11 +76,13 @@ currentROI_name = current_ROI_cell{2};
 
 % These vectors will accumulate the data from ALL subjects
 all_subject_ids = {};       % Will store subject labels as strings
-all_alpha_power = [];       % Will store the single-trial Alpha power predictor (X1)
+all_alpha_power_raw = [];
+all_alpha_power = [];  % Will store the single-trial Alpha power predictor (X1)
 all_stim_intensity_raw = [];    % Will store the Stimulus Intensity RAW
 all_stim_intensity = [];    % Will store the Stimulus Intensity (X2)
 all_subjective_outcome = [];% Will store the binary subjective outcome (Y)
 
+tic
 
 % --- START LOOP ---
 for sub_idx = 1:N_SUBJECTS
@@ -115,8 +122,10 @@ for sub_idx = 1:N_SUBJECTS
     
     % --- C. Trial Selection and Filtering (Function Calls) ---
     % 1. Find and link targets to responses (The complex selection logic)
-    [latencies, codes, intensities, outcomes, n_trials] = select_single_trials(SDATA, target_codes, report_unseen_code, report_seen_codes);
-    
+    % Use this line if condition is not irregular
+    %[latencies, codes, intensities, outcomes, n_trials] = select_single_trials(SDATA, target_codes, report_unseen_code, report_seen_codes); 
+    % Use this line if condition is irregular
+    [latencies, codes, intensities, outcomes, n_trials] = select_single_trials_irregular(SDATA, warning_codes_of_interest, all_warning_codes, subject_id_str);
     % 2. Downsample trials (Optional, using the max limit)
     % [latencies, codes, outcomes, n_trials] = downsample_trials(latencies, codes, outcomes, MAX_TARGET_TRIALS); 
 
@@ -153,6 +162,7 @@ for sub_idx = 1:N_SUBJECTS
 % --- 6. Append to Master Vectors (The Aggregation) ---
     % Append the Z-scored versions!
     all_alpha_power = [all_alpha_power; current_alpha_power_z];
+    all_alpha_power_raw = [all_alpha_power_raw; current_alpha_power];
     all_stim_intensity = [all_stim_intensity; current_stim_intensity_z];
     all_stim_intensity_raw = [all_stim_intensity_raw; current_stim_intensity];
 
@@ -168,7 +178,7 @@ for sub_idx = 1:N_SUBJECTS
 
 end
 
-
+toc
 
 %% 3. FINALIZATION AND INSPECTION (Creating the Master Table)
 
@@ -178,12 +188,14 @@ alpha_predictor_name = strcat('AlphaPower_Avg_', num2str(pred_window_s * 1000), 
 
 
 % 2. Create the VariableNames cell array explicitly
-column_names = {'SubjectiveOutcome', alpha_predictor_name, 'StimIntensity', 'StimIntensityRaw', 'SubjectID'};
+column_names = {'SubjectiveOutcome', alpha_predictor_name, 'AlphaPowerRaw', 'StimIntensity', 'StimIntensityRaw', 'SubjectID'};
 
 
 % --- Now the table creation is simplified and robust ---
-MasterTable = table(all_subjective_outcome, all_alpha_power, all_stim_intensity, all_stim_intensity_raw, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
+MasterTable = table(all_subjective_outcome, all_alpha_power, all_alpha_power_raw, all_stim_intensity, all_stim_intensity_raw, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
 
+MasterTable(isnan(MasterTable.SubjectiveOutcome), :) = []; 
+disp('Removed corrupted rows (NaN in SubjectiveOutcome).');
 
 % 2. Convert SubjectID and Outcome to Categorical/Logical for GLMM (Crucial)
 MasterTable.SubjectID = categorical(MasterTable.SubjectID);
@@ -202,7 +214,7 @@ head(MasterTable)
 RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
-final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_pilot_biggest_zscored_and_rawstim.2.0.mat');
+final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_Predictive_Corrected.mat');
 
 % 4. Save the table
 save(final_save_path, 'MasterTable', '-v7.3');

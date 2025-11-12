@@ -74,14 +74,18 @@ N_unseen = sum(MasterTable.SubjectiveOutcome == 0);
 % 2. Calculate the proportion of the largest class (the maximum chance performance)
 max_chance_accuracy = max(N_seen, N_unseen) / N_Total;
 
-threshold = 1-max_chance_accuracy;  
+if N_seen < N_unseen
+    threshold = 1-max_chance_accuracy;  
+else 
+    threshold = max_chance_accuracy;
+end
 
 disp(['Baseline Performance (Max Chance Guess): ' num2str(max_chance_accuracy * 100, 3) '%']);
 
 % --- Now update the plotting line to use this new variable ---
 
 % Original Chance Line: line(xlim, [0.5 0.5], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 1.5);
-line(xlim, [max_chance_accuracy max_chance_accuracy], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 1.5);
+%line(xlim, [max_chance_accuracy max_chance_accuracy], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 1.5);
 
 %% A. DEFINE AND FIT THE GENERALIZED LINEAR MIXED MODEL (GLMM) SIMPLE
 
@@ -162,39 +166,11 @@ hold off;
 
 %% A.2 PREDICTION ACCURACY AND CLASSIFICATION
 
-% --- 1. Get Predicted Probabilities for all trials in the MasterTable ---
-% The predict function returns the probability of the outcome being '1' (Seen).
-predicted_prob = predict(glme_simple, MasterTable);
+% Predicting Outcome and Accuracy
+[actual_outcome, predicted_outcome, accuracy1] = predict_outcome(MasterTable, glme_simple, threshold);
 
-% --- 2. Determine Binary Prediction (Threshold = 0.5) ---
-% Prediction is 1 (Seen) if probability >= 0.5, else 0 (Unseen).
-predicted_outcome = (predicted_prob >= threshold); 
-
-% --- 3. Compare Prediction to Actual Outcome ---
-actual_outcome = double(MasterTable.SubjectiveOutcome); % Convert logical back to double (0/1)
-
-% Calculate Accuracy: (Correct Predictions) / (Total Trials)
-N_Correct = sum(predicted_outcome == actual_outcome);
-N_Total = length(actual_outcome);
-accuracy1 = N_Correct / N_Total;
-
-disp('------------------------------------------');
-disp('MODEL PERFORMANCE:');
-disp(['Total Trials Classified: ' num2str(N_Total)]);
-disp(['Overall Prediction Accuracy: ' num2str(accuracy1 * 100, 4) '%']);
-disp('------------------------------------------');
-
-
-figure('Units', 'normalized', 'Position', [0.7 0.2 0.3 0.4]);
-bar_data = [accuracy1, max_chance_accuracy]; % Compare Accuracy to Chance (0.5)
-
-bar(bar_data);
-set(gca, 'XTickLabel', {'Model Accuracy', 'Chance Level'});
-ylim([0 1]);
-title('Overall Single-Trial Prediction Accuracy', 'FontSize', 14);
-ylabel('Accuracy (Proportion Correct)');
-grid on;
-
+% Confusion Matrix
+confusion_matrix(actual_outcome, predicted_outcome);
 
 %% A.3. QUICK PLOT: ACCURACY PER INTENSITY LEVEL (BINS)
 
@@ -224,6 +200,7 @@ for i = 1:N_BINS
     predicted_level = predicted_outcome(idx_level);
     
     N_level_trials = length(actual_level);
+    disp(N_level_trials);
     
     if N_level_trials > 0
         % Calculate accuracy: (Correct Predictions) / (Total Trials in Bin)
@@ -240,7 +217,7 @@ h = bar(accuracy_per_bin1);
 h.FaceColor = [0.1 0.4 0.7]; 
 
 % Create labels for the X-axis (e.g., 'Bin 1', 'Bin 2', etc.)
-labels = arrayfun(@(x) ['Constrast ' num2str(x+1)], min(intensity_levels):max(intensity_levels), 'UniformOutput', false);
+labels = arrayfun(@(x) ['Constrast ' num2str(x)], min(intensity_levels):max(intensity_levels), 'UniformOutput', false);
 
 set(gca, 'XTickLabel', labels);
 ylim([0 1]);
@@ -348,13 +325,13 @@ MasterTable.AlphaPower_Avg_100ms = double(MasterTable.AlphaPower_Avg_100ms);
 MasterTable.StimIntensity = double(MasterTable.StimIntensity);
 
 % --- Now run the model ---
-glme_complex = fitglme(MasterTable, model_formula, ...
+glme_alpha_stim_inter = fitglme(MasterTable, model_formula, ...
                'Distribution', 'Binomial', ...
                'Link', 'logit', 'FitMethod','Laplace');
 
 disp('Model fitting complete.');
 
-disp(glme_complex.Coefficients);
+disp(glme_alpha_stim_inter.Coefficients);
 
 
 %% B.1 PLOT LOGISTIC PREDICTION CURVE (Seen Probability vs. Alpha Power)
@@ -372,7 +349,7 @@ fixed_intensity = mean(MasterTable.StimIntensity);
 
 
 % 1. Extract Fixed Effect Coefficients (Assuming the structure is correct for your system)
-T = glme_complex.Coefficients;
+T = glme_alpha_stim_inter.Coefficients;
 beta_0 = T.Estimate(strcmp(T.Name, '(Intercept)'));
 beta_alpha = T.Estimate(strcmp(T.Name, 'AlphaPower_Avg_100ms'));
 beta_intensity = T.Estimate(strcmp(T.Name, 'StimIntensity'));
@@ -393,7 +370,7 @@ probability_seen = 1 ./ (1 + exp(-log_odds));
 figure('Units', 'normalized', 'Position', [0.2 0.2 0.4 0.6]);
 plot(alpha_plot_range, probability_seen, 'b', 'LineWidth', 3);
 hold on;
-plot(alpha_plot_range, probability_seen>=0.5, 'r', 'LineWidth', 3);
+plot(alpha_plot_range, probability_seen>=threshold, 'r', 'LineWidth', 3);
 hold on;
 
 % Add points for the raw data groups (for visual context)
@@ -410,45 +387,18 @@ hold off;
 
 %% B.2 PREDICTION ACCURACY AND CLASSIFICATION
 
-% --- 1. Get Predicted Probabilities for all trials in the MasterTable ---
-% The predict function returns the probability of the outcome being '1' (Seen).
-predicted_prob = predict(glme_complex, MasterTable);
+% Predicting Outcome and Accuracy
+[actual_outcome, predicted_outcome, accuracy2] = predict_outcome(MasterTable, glme_alpha_stim_inter, threshold);
 
-% --- 2. Determine Binary Prediction (Threshold = 0.5) ---
-% Prediction is 1 (Seen) if probability >= 0.5, else 0 (Unseen).
-predicted_outcome = (predicted_prob >= threshold); 
-
-% --- 3. Compare Prediction to Actual Outcome ---
-actual_outcome = double(MasterTable.SubjectiveOutcome); % Convert logical back to double (0/1)
-
-% Calculate Accuracy: (Correct Predictions) / (Total Trials)
-N_Correct = sum(predicted_outcome == actual_outcome);
-N_Total = length(actual_outcome);
-accuracy2 = N_Correct / N_Total;
-
-disp('------------------------------------------');
-disp('MODEL PERFORMANCE:');
-disp(['Total Trials Classified: ' num2str(N_Total)]);
-disp(['Overall Prediction Accuracy: ' num2str(accuracy2 * 100, 4) '%']);
-disp('------------------------------------------');
-
-
-figure('Units', 'normalized', 'Position', [0.7 0.2 0.3 0.4]);
-bar_data = [accuracy2, max_chance_accuracy]; % Compare Accuracy to Chance (0.5)
-
-bar(bar_data);
-set(gca, 'XTickLabel', {'Model Accuracy', 'Chance Level'});
-ylim([0 1]);
-title('Overall Single-Trial Prediction Accuracy', 'FontSize', 14);
-ylabel('Accuracy (Proportion Correct)');
-grid on;
+% Confusion Matrix
+confusion_matrix(actual_outcome, predicted_outcome);
 
 
 %% B.3. QUICK PLOT: ACCURACY PER INTENSITY LEVEL (BINS)
 
 
 % --- 1. Get Predicted Probabilities and Actual Outcomes ---
-predicted_outcome = (predict(glme_complex, MasterTable) >= threshold); 
+predicted_outcome = (predict(glme_alpha_stim_inter, MasterTable) >= threshold); 
 actual_outcome = double(MasterTable.SubjectiveOutcome);
 
 % --- 2. Define Bins and Group Data ---
@@ -586,13 +536,13 @@ MasterTable.AlphaPower_Avg_100ms = double(MasterTable.AlphaPower_Avg_100ms);
 MasterTable.StimIntensity = double(MasterTable.StimIntensity);
 
 % --- Now run the model ---
-glme_complex2 = fitglme(MasterTable, model_formula, ...
+glme_alpha_stim_inter_rs = fitglme(MasterTable, model_formula, ...
                'Distribution', 'Binomial', ...
                'Link', 'logit', 'FitMethod','Laplace');
 
 disp('Model fitting complete.');
 
-disp(glme_complex2.Coefficients);
+disp(glme_alpha_stim_inter_rs.Coefficients);
 
 
 %% C.1 PLOT LOGISTIC PREDICTION CURVE (Seen Probability vs. Alpha Power)
@@ -610,7 +560,7 @@ fixed_intensity = mean(MasterTable.StimIntensity);
 
 
 % 1. Extract Fixed Effect Coefficients (Assuming the structure is correct for your system)
-T = glme_complex2.Coefficients;
+T = glme_alpha_stim_inter_rs.Coefficients;
 beta_0 = T.Estimate(strcmp(T.Name, '(Intercept)'));
 beta_alpha = T.Estimate(strcmp(T.Name, 'AlphaPower_Avg_100ms'));
 beta_intensity = T.Estimate(strcmp(T.Name, 'StimIntensity'));
@@ -631,7 +581,7 @@ probability_seen = 1 ./ (1 + exp(-log_odds));
 figure('Units', 'normalized', 'Position', [0.2 0.2 0.4 0.6]);
 plot(alpha_plot_range, probability_seen, 'b', 'LineWidth', 3);
 hold on;
-plot(alpha_plot_range, probability_seen>=0.5, 'r', 'LineWidth', 3);
+plot(alpha_plot_range, probability_seen>=threshold, 'r', 'LineWidth', 3);
 hold on;
 
 % Add points for the raw data groups (for visual context)
@@ -647,45 +597,19 @@ hold off;
 
 %% C.2 PREDICTION ACCURACY AND CLASSIFICATION
 
-% --- 1. Get Predicted Probabilities for all trials in the MasterTable ---
-% The predict function returns the probability of the outcome being '1' (Seen).
-predicted_prob = predict(glme_complex2, MasterTable);
 
-% --- 2. Determine Binary Prediction (Threshold = 0.5) ---
-% Prediction is 1 (Seen) if probability >= 0.5, else 0 (Unseen).
-predicted_outcome = (predicted_prob >= 0.5); 
+% Predicting Outcome and Accuracy
+[actual_outcome, predicted_outcome, accuracy3] = predict_outcome(MasterTable, glme_alpha_stim_inter_rs, threshold);
 
-% --- 3. Compare Prediction to Actual Outcome ---
-actual_outcome = double(MasterTable.SubjectiveOutcome); % Convert logical back to double (0/1)
-
-% Calculate Accuracy: (Correct Predictions) / (Total Trials)
-N_Correct = sum(predicted_outcome == actual_outcome);
-N_Total = length(actual_outcome);
-accuracy3 = N_Correct / N_Total;
-
-disp('------------------------------------------');
-disp('MODEL PERFORMANCE:');
-disp(['Total Trials Classified: ' num2str(N_Total)]);
-disp(['Overall Prediction Accuracy: ' num2str(accuracy3 * 100, 4) '%']);
-disp('------------------------------------------');
-
-
-figure('Units', 'normalized', 'Position', [0.7 0.2 0.3 0.4]);
-bar_data = [accuracy3, 0.5]; % Compare Accuracy to Chance (0.5)
-
-bar(bar_data);
-set(gca, 'XTickLabel', {'Model Accuracy', 'Chance Level'});
-ylim([0 1]);
-title('Overall Single-Trial Prediction Accuracy', 'FontSize', 14);
-ylabel('Accuracy (Proportion Correct)');
-grid on;
+% Confusion Matrix
+confusion_matrix(actual_outcome, predicted_outcome);
 
 
 %% C.3. QUICK PLOT: ACCURACY PER INTENSITY LEVEL (BINS)
 
 
 % --- 1. Get Predicted Probabilities and Actual Outcomes ---
-predicted_outcome = (predict(glme_complex2, MasterTable) >= 0.5); 
+predicted_outcome = (predict(glme_alpha_stim_inter_rs, MasterTable) >= 0.5); 
 actual_outcome = double(MasterTable.SubjectiveOutcome);
 
 % --- 2. Define Bins and Group Data ---
@@ -757,13 +681,13 @@ MasterTable.StimIntensity = double(MasterTable.StimIntensity);
 % Family: 'Binomial' (because the outcome is binary: Seen vs. Unseen)
 % Distribution: 'logit' (Standard link function for binary logistic regression)
 
-glme_control = fitglme(MasterTable, model_formula, ...
+glme_stim = fitglme(MasterTable, model_formula, ...
                'Distribution', 'Binomial', ...
                'Link', 'logit', 'FitMethod','Laplace');
 
 disp('Model fitting complete.');
 
-disp(glme_control.Coefficients);
+disp(glme_stim.Coefficients);
 
 
 %% D.1 PLOT LOGISTIC PREDICTION CURVE (Seen Probability vs. Alpha Power)
@@ -784,7 +708,7 @@ stimraw_plot_range = linspace(stimraw_mean - 4*stimraw_std, stimraw_mean + 4*sti
 
 
 % 1. Extract Fixed Effect Coefficients (Assuming the structure is correct for your system)
-T = glme_control.Coefficients;
+T = glme_stim.Coefficients;
 beta_0 = T.Estimate(strcmp(T.Name, '(Intercept)'));
 beta_stim = T.Estimate(strcmp(T.Name, 'StimIntensity'));
 
@@ -802,7 +726,7 @@ probability_seen = 1 ./ (1 + exp(-log_odds));
 figure('Units', 'normalized', 'Position', [0.2 0.2 0.4 0.6]);
 plot(stimraw_plot_range, probability_seen, 'b', 'LineWidth', 3);
 hold on;
-plot(stimraw_plot_range, probability_seen>=0.5, 'r', 'LineWidth', 3);
+plot(stimraw_plot_range, probability_seen>=threshold, 'r', 'LineWidth', 3);
 hold on;
 
 
@@ -819,45 +743,17 @@ hold off;
 
 %% D.2 PREDICTION ACCURACY AND CLASSIFICATION
 
-% --- 1. Get Predicted Probabilities for all trials in the MasterTable ---
-% The predict function returns the probability of the outcome being '1' (Seen).
-predicted_prob = predict(glme_control, MasterTable);
+% Predicting Outcome and Accuracy
+[actual_outcome, predicted_outcome, accuracy4] = predict_outcome(MasterTable, glme_stim, threshold);
 
-% --- 2. Determine Binary Prediction (Threshold = 0.5) ---
-% Prediction is 1 (Seen) if probability >= 0.5, else 0 (Unseen).
-predicted_outcome = (predicted_prob >= threshold); 
-
-% --- 3. Compare Prediction to Actual Outcome ---
-actual_outcome = double(MasterTable.SubjectiveOutcome); % Convert logical back to double (0/1)
-
-% Calculate Accuracy: (Correct Predictions) / (Total Trials)
-N_Correct = sum(predicted_outcome == actual_outcome);
-N_Total = length(actual_outcome);
-accuracy4 = N_Correct / N_Total;
-
-disp('------------------------------------------');
-disp('MODEL PERFORMANCE:');
-disp(['Total Trials Classified: ' num2str(N_Total)]);
-disp(['Overall Prediction Accuracy: ' num2str(accuracy4 * 100, 4) '%']);
-disp('------------------------------------------');
-
-
-figure('Units', 'normalized', 'Position', [0.7 0.2 0.3 0.4]);
-bar_data = [accuracy4, max_chance_accuracy]; % Compare Accuracy to Chance (0.5)
-
-bar(bar_data);
-set(gca, 'XTickLabel', {'Model Accuracy', 'Chance Level'});
-ylim([0 1]);
-title('Overall Single-Trial Prediction Accuracy', 'FontSize', 14);
-ylabel('Accuracy (Proportion Correct)');
-grid on;
-
+% Confusion Matrix
+confusion_matrix(actual_outcome, predicted_outcome);
 
 %% D.3. QUICK PLOT: ACCURACY PER INTENSITY LEVEL (BINS)
 
 
 % --- 1. Get Predicted Probabilities and Actual Outcomes ---
-predicted_outcome = (predict(glme_control, MasterTable) >= 0.5); 
+predicted_outcome = (predict(glme_stim, MasterTable) >= 0.5); 
 actual_outcome = double(MasterTable.SubjectiveOutcome);
 
 % --- 2. Define Bins and Group Data ---
@@ -1009,13 +905,13 @@ MasterTable.AlphaPower_Avg_100ms = double(MasterTable.AlphaPower_Avg_100ms);
 MasterTable.StimIntensity = double(MasterTable.StimIntensity);
 
 % --- Now run the model ---
-glme_nointer = fitglme(MasterTable, model_formula, ...
+glme_alpha_stim = fitglme(MasterTable, model_formula, ...
                'Distribution', 'Binomial', ...
                'Link', 'logit', 'FitMethod', 'Laplace');
 
 disp('Model fitting complete.');
 
-disp(glme_nointer.Coefficients);
+disp(glme_alpha_stim.Coefficients);
 
 %% E.1 PLOT LOGISTIC PREDICTION CURVE (Seen Probability vs. Alpha Power)
 
@@ -1032,7 +928,7 @@ fixed_intensity = mean(MasterTable.StimIntensity);
 
 
 % 1. Extract Fixed Effect Coefficients (Assuming the structure is correct for your system)
-T = glme_nointer.Coefficients;
+T = glme_alpha_stim.Coefficients;
 beta_0 = T.Estimate(strcmp(T.Name, '(Intercept)'));
 beta_alpha = T.Estimate(strcmp(T.Name, 'AlphaPower_Avg_100ms'));
 beta_intensity = T.Estimate(strcmp(T.Name, 'StimIntensity'));
@@ -1069,45 +965,18 @@ hold off;
 
 %% E.2 PREDICTION ACCURACY AND CLASSIFICATION
 
-% --- 1. Get Predicted Probabilities for all trials in the MasterTable ---
-% The predict function returns the probability of the outcome being '1' (Seen).
-predicted_prob = predict(glme_nointer, MasterTable);
+% Predicting Outcome and Accuracy
+[actual_outcome, predicted_outcome, accuracy5] = predict_outcome(MasterTable, glme_alpha_stim, threshold);
 
-% --- 2. Determine Binary Prediction (Threshold = 0.5) ---
-% Prediction is 1 (Seen) if probability >= 0.5, else 0 (Unseen).
-predicted_outcome = (predicted_prob >= threshold); 
-
-% --- 3. Compare Prediction to Actual Outcome ---
-actual_outcome = double(MasterTable.SubjectiveOutcome); % Convert logical back to double (0/1)
-
-% Calculate Accuracy: (Correct Predictions) / (Total Trials)
-N_Correct = sum(predicted_outcome == actual_outcome);
-N_Total = length(actual_outcome);
-accuracy5 = N_Correct / N_Total;
-
-disp('------------------------------------------');
-disp('MODEL PERFORMANCE:');
-disp(['Total Trials Classified: ' num2str(N_Total)]);
-disp(['Overall Prediction Accuracy: ' num2str(accuracy5 * 100, 4) '%']);
-disp('------------------------------------------');
-
-
-figure('Units', 'normalized', 'Position', [0.7 0.2 0.3 0.4]);
-bar_data = [accuracy5, max_chance_accuracy]; % Compare Accuracy to Chance (0.5)
-
-bar(bar_data);
-set(gca, 'XTickLabel', {'Model Accuracy', 'Chance Level'});
-ylim([0 1]);
-title('Overall Single-Trial Prediction Accuracy', 'FontSize', 14);
-ylabel('Accuracy (Proportion Correct)');
-grid on;
+% Confusion Matrix
+confusion_matrix(actual_outcome, predicted_outcome);
 
 
 %% E.3. QUICK PLOT: ACCURACY PER INTENSITY LEVEL (BINS)
 
 
 % --- 1. Get Predicted Probabilities and Actual Outcomes ---
-predicted_outcome = (predict(glme_nointer, MasterTable) >= threshold); 
+predicted_outcome = (predict(glme_alpha_stim, MasterTable) >= threshold); 
 actual_outcome = double(MasterTable.SubjectiveOutcome);
 
 % --- 2. Define Bins and Group Data ---
@@ -1243,7 +1112,7 @@ disp('--- Running Likelihood Ratio Test (LRT) ---');
 
 % --- CRITICAL STEP: Compare the two fitted models ---
 % This tests the hypothesis: Is the variance explained by AlphaPower * StimIntensity necessary?
-comparison_table = compare(glme_control, glme_complex);
+comparison_table = compare(glme_alpha_stim, glme_alpha_stim_inter);
 
 disp('LRT Results:');
 disp(comparison_table);
@@ -1281,9 +1150,7 @@ model_labels = {'alpha', 'alpha+stim+inter', 'alpha+stim+inter+rs', 'stim', 'alp
 set(gca, 'XTickLabel', model_labels);
 ylim([0.45 1.0]); % Set Y-limit to a meaningful range
 
-% Add Max Chance Baseline (assuming 0.583 for visualization)
-max_chance = 0.583;
-line(xlim, [max_chance max_chance], 'Color', 'r', 'LineWidth', 2, 'LineStyle', '--', 'DisplayName', 'Max Chance Baseline');
+line(xlim, [max_chance_accuracy max_chance_accuracy], 'Color', 'r', 'LineWidth', 2, 'LineStyle', '--', 'DisplayName', 'Max Chance Baseline');
 
 title('Overall Accuracy of All Fitted GLMMs', 'FontSize', 14);
 ylabel('Accuracy (Proportion Correct)');
@@ -1307,7 +1174,7 @@ contrast_labels = arrayfun(@(x) ['Level ' num2str(x)], 1:size(accuracy_matrix, 1
 
 set(gca, 'XTickLabel', contrast_labels);
 ylim([0.45 1.0]);
-line(xlim, [max_chance max_chance], 'Color', 'k', 'LineWidth', 1.5, 'LineStyle', '--');
+line(xlim, [max_chance_accuracy max_chance_accuracy], 'Color', 'r', 'LineWidth', 1.5, 'LineStyle', '--','DisplayName', 'Max Chance Baseline');
 
 title('Prediction Accuracy by Contrast Level (All Models)', 'FontSize', 14);
 xlabel('Stimulus Intensity Level');
@@ -1414,7 +1281,7 @@ end
 
 % 1. Define the Threshold Trials (The "Sweet Spot" where Simple Model peaked)
 % Assuming your threshold is intensity levels 3, 4, and 5 (the middle contrast levels)
-THRESHOLD_LEVELS = [ 4]; 
+THRESHOLD_LEVELS = [4 5 6]; 
 
 % Find all trials belonging to the threshold levels
 idx_threshold_trials = ismember(MasterTable.StimIntensityRaw, THRESHOLD_LEVELS);
@@ -1429,52 +1296,31 @@ glme_simple_threshold = fitglme(T_train_threshold, ...
 disp('Model trained exclusively on Threshold Trials.');
 
 
-% --- TEST ACCURACY ACROSS ALL 7 RAW INTENSITY BINS ---
-% (This reuses the logic from your previous accuracy bar plot)
 
-raw_intensity_levels = unique(MasterTable.StimIntensityRaw);
-N_BINS = length(raw_intensity_levels);
-accuracy_per_bin_threshold_trained = zeros(N_BINS, 1);
 
-for i = 1:N_BINS
-    current_level = raw_intensity_levels(i);
-    
-    % Find all trials belonging to this level (the full test set)
-    idx_test_level = (MasterTable.StimIntensityRaw == current_level);
-    T_test_level = MasterTable(idx_test_level, :);
-    
-    if ~isempty(T_test_level)
-        % Predict using the model trained only on the threshold data
-        predicted_prob = predict(glme_simple_threshold, T_test_level);
-        predicted_outcome = (predicted_prob >= 0.5);
-        
-        actual_outcome = double(T_test_level.SubjectiveOutcome);
-        
-        accuracy_per_bin_threshold_trained(i) = sum(predicted_outcome == actual_outcome) / size(T_test_level, 1);
-    end
-
-    %if current_level == 2
-        %histogram(probab)
-end
-
-%% Baseline Accuracy 
+%% Baseline Accuracy for train_threshold
 
 % 1. Count the number of 'Seen' trials (1) and 'Unseen' trials (0)
-N_Total = length(T_train_threshold  .SubjectiveOutcome);
+N_Total = length(T_train_threshold.SubjectiveOutcome);
 N_seen = sum(T_train_threshold.SubjectiveOutcome == 1);
 N_unseen = sum(T_train_threshold.SubjectiveOutcome == 0);
 
 % 2. Calculate the proportion of the largest class (the maximum chance performance)
 max_chance_accuracy = max(N_seen, N_unseen) / N_Total;
 
-threshold = 1-max_chance_accuracy;  
+if N_seen < N_unseen
+    threshold = 1-max_chance_accuracy;  
+else 
+    threshold = max_chance_accuracy;
+end
 
 disp(['Baseline Performance (Max Chance Guess): ' num2str(max_chance_accuracy * 100, 3) '%']);
 
 % --- Now update the plotting line to use this new variable ---
 
 % Original Chance Line: line(xlim, [0.5 0.5], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 1.5);
-line(xlim, [max_chance_accuracy max_chance_accuracy], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 1.5);
+%line(xlim, [max_chance_accuracy max_chance_accuracy], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 1.5);
+
 
 
 %% F.1 PLOT LOGISTIC PREDICTION CURVE (Seen Probability vs. Alpha Power)
@@ -1524,6 +1370,73 @@ ylabel('Predicted Probability of "Seen" (Y)');
 ylim([0 1]); % Probability scale
 grid on;
 hold off;
+
+%% F.2 PREDICTION ACCURACY AND CLASSIFICATION
+
+% --- 1. Get Predicted Probabilities for all trials in the MasterTable ---
+% The predict function returns the probability of the outcome being '1' (Seen).
+predicted_prob = predict(glme_simple_threshold, MasterTable);
+
+% --- 2. Determine Binary Prediction (Threshold = 0.5) ---
+% Prediction is 1 (Seen) if probability >= 0.5, else 0 (Unseen).
+predicted_outcome = (predicted_prob >= threshold); 
+
+% --- 3. Compare Prediction to Actual Outcome ---
+actual_outcome = double(MasterTable.SubjectiveOutcome); % Convert logical back to double (0/1)
+
+% Calculate Accuracy: (Correct Predictions) / (Total Trials)
+N_Correct = sum(predicted_outcome == actual_outcome);
+N_Total = length(actual_outcome);
+accuracy1 = N_Correct / N_Total;
+
+disp('------------------------------------------');
+disp('MODEL PERFORMANCE:');
+disp(['Total Trials Classified: ' num2str(N_Total)]);
+disp(['Overall Prediction Accuracy: ' num2str(accuracy1 * 100, 4) '%']);
+disp('------------------------------------------');
+
+
+figure('Units', 'normalized', 'Position', [0.7 0.2 0.3 0.4]);
+bar_data = [accuracy1, max_chance_accuracy]; % Compare Accuracy to Chance (0.5)
+
+bar(bar_data);
+set(gca, 'XTickLabel', {'Model Accuracy', 'Chance Level'});
+ylim([0 1]);
+title('Overall Single-Trial Prediction Accuracy', 'FontSize', 14);
+ylabel('Accuracy (Proportion Correct)');
+grid on;
+
+confusion_matrix(actual_outcome, predicted_outcome);
+
+
+%% F.3 --- TEST ACCURACY ACROSS ALL 7 RAW INTENSITY BINS ---
+% (This reuses the logic from your previous accuracy bar plot)
+
+raw_intensity_levels = unique(MasterTable.StimIntensityRaw);
+N_BINS = length(raw_intensity_levels);
+accuracy_per_bin_threshold_trained = zeros(N_BINS, 1);
+
+for i = 1:N_BINS
+    current_level = raw_intensity_levels(i);
+    
+    % Find all trials belonging to this level (the full test set)
+    idx_test_level = (MasterTable.StimIntensityRaw == current_level);
+    T_test_level = MasterTable(idx_test_level, :);
+    
+    if ~isempty(T_test_level)
+        % Predict using the model trained only on the threshold data
+        predicted_prob = predict(glme_simple_threshold, T_test_level);
+        predicted_outcome = (predicted_prob >= threshold);
+        
+        actual_outcome = double(T_test_level.SubjectiveOutcome);
+        
+        accuracy_per_bin_threshold_trained(i) = sum(predicted_outcome == actual_outcome) / size(T_test_level, 1);
+    end
+
+    %if current_level == 2
+        %histogram(probab)
+end
+
 
 %% 8. VISUALIZATION OF SPECIALIZATION (Bar Plot)
 

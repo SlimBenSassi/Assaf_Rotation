@@ -56,11 +56,12 @@ pred_start_sample = pre_samples + round(-pred_window_s * Fs); % e.g., sample 410
 pred_end_sample = pre_samples;
 
 % ---  Event Codes --- %
-target_codes = [011, 012, 013, 014, 015, 016, 021, 022, 023, 024, 025, 026, 211, 212, 213, 214, 215, 216, 221, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
+%target_codes = [011, 012, 013, 014, 015, 016, 021, 022, 023, 024, 025, 026, 211, 212, 213, 214, 215, 216, 221, 222, 223, 224, 225, 226]; % (01X means contrast X+1) Targets: Rhythm Target Contrast 4,5,6,7 Right, same but Left (contrasts around threshold) 
 %target_codes = [014, 015, 016, 024, 025, 026, 214, 215, 216, 224, 225, 226];
-%targer_codes = [014, 015, 016, 024, 025, 026];
-report_unseen_code = [231, 241]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
-report_seen_codes = [232, 233, 234, 242, 243, 244]; % Subjective report
+%target_codes = [014, 015, 016, 024, 025, 026];
+target_codes=[100:200 ];
+report_unseen_code = [250]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
+report_seen_codes = [251:253]; % Subjective report
 %codes for 'Saw' (Hit) for rhythm 232, for interval 242
 %report_seen_codes = [232, 233, 234];
 
@@ -128,7 +129,7 @@ for i = 1:length(trigger_codes)
         found_report = false;
         
         % Search the next few indices (up to end of response window)
-        for j = i + 1 : min(i + 4, length(trigger_codes)) % i+4 is because subj response is the fourth event after a target showing
+        for j = i + 1 : min(i + 8, length(trigger_codes)) % i+4 is because subj response is the fourth event after a target showing
             report_code = trigger_codes(j);
             
             if ismember(report_code, [report_unseen_code, report_seen_codes])
