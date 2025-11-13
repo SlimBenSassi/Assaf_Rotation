@@ -1,10 +1,11 @@
-function [filtered_latencies, filtered_codes, filtered_intensities, filtered_outcomes, n_trials_final] = reject_artifact_trials(SDATA, epoch_latencies, epoch_codes, intensities, y_subjective_outcome, total_epoch_samples, pre_samples)
+function [filtered_latencies, filtered_codes, filtered_intensities, filtered_obj_outcomes, filtered_subj_outcomes, n_trials_final] = reject_artifact_trials(SDATA, epoch_latencies, epoch_codes, intensities, y_objective_outcome, y_subjective_outcome, total_epoch_samples, pre_samples)
 % REJECT_ARTIFACT_TRIALS Filters trials that overlap with the continuous artifact mask.
 %
 % INPUTS:
 %   SDATA: Main data structure containing the continuous artifact mask.
 %   epoch_latencies: Sample indices of the target events (N x 1).
 %   epoch_codes: Event codes corresponding to the latencies (N x 1).
+%   y_objective_outcome: Binary objective outcome (0/1) (N x 1).
 %   y_subjective_outcome: Binary subjective outcome (0/1) (N x 1).
 %   total_epoch_samples: Total length of the epoch (in samples).
 %   pre_samples: Number of samples in the pre-stimulus baseline.
@@ -54,7 +55,8 @@ disp(['Rejected ' num2str(n_rejected) ' trials due to temporal artifacts.']);
 filtered_latencies = epoch_latencies(is_good_trial);
 filtered_codes = epoch_codes(is_good_trial);
 filtered_intensities = intensities(is_good_trial);
-filtered_outcomes = y_subjective_outcome(is_good_trial);
+filtered_obj_outcomes = y_objective_outcome(is_good_trial);
+filtered_subj_outcomes = y_subjective_outcome(is_good_trial);
 n_trials_final = sum(is_good_trial); % Update the total trial count
 
 disp(['Final N after temporal rejection: ' num2str(n_trials_final)]);

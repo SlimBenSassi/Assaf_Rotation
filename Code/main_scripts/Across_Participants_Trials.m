@@ -35,7 +35,7 @@ alpha_freq_range = [8, 12]; % Alpha band for filtering (Hz)
 % --- Time Variables --- %
 Fs = 1024; %change if needed
 n_channels = 71; %change if needed
-pred_window_s = 0.100; % 200ms pre-stimulus prediction window (used for non-time resolved average across window)
+pred_window_s = 0.200; % 200ms pre-stimulus prediction window (used for non-time resolved average across window)
 PRE_EVENT_SEC = 0.5; %taking all time since warning signal 
 POST_EVENT_SEC = 0.1;
 total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
@@ -80,7 +80,9 @@ all_alpha_power_raw = [];
 all_alpha_power = [];  % Will store the single-trial Alpha power predictor (X1)
 all_stim_intensity_raw = [];    % Will store the Stimulus Intensity RAW
 all_stim_intensity = [];    % Will store the Stimulus Intensity (X2)
+all_objective_outcome = [];% Will store the binary objective outcome (Y)
 all_subjective_outcome = [];% Will store the binary subjective outcome (Y)
+
 
 tic
 
@@ -125,12 +127,12 @@ for sub_idx = 1:N_SUBJECTS
     % Use this line if condition is not irregular
     %[latencies, codes, intensities, outcomes, n_trials] = select_single_trials(SDATA, target_codes, report_unseen_code, report_seen_codes); 
     % Use this line if condition is irregular
-    [latencies, codes, intensities, outcomes, n_trials] = select_single_trials_irregular(SDATA, warning_codes_of_interest, all_warning_codes, subject_id_str);
+    [latencies, codes, intensities, obj_outcomes, subj_outcomes, n_trials] = select_single_trials_behavior(SDATA, warning_codes_of_interest, all_warning_codes, subject_id_str);
     % 2. Downsample trials (Optional, using the max limit)
     % [latencies, codes, outcomes, n_trials] = downsample_trials(latencies, codes, outcomes, MAX_TARGET_TRIALS); 
 
     % 3. Reject trials overlapping with artifact mask
-    [latencies, codes, intensities, outcomes, n_trials] = reject_artifact_trials(SDATA, latencies, codes, intensities, outcomes, total_epoch_samples, pre_samples);
+    [latencies, codes, intensities, obj_outcomes, subj_outcomes, n_trials] = reject_artifact_trials(SDATA, latencies, codes, intensities, obj_outcomes, subj_outcomes, total_epoch_samples, pre_samples);
     
     % 4. Epoching and Time-Frequency Analysis (The most complex step)
     all_epochs_padded = epoch_with_padding(data_matrix, Fs, n_channels, n_trials, latencies, total_epoch_samples, pre_samples, alpha_freq_range);
@@ -150,7 +152,8 @@ for sub_idx = 1:N_SUBJECTS
     % 3. CONVERT TO COLUMN VECTORS FOR AGGREGATION
     % The final aggregated data must be N_Trials x 1 column vectors.
     current_alpha_power = current_alpha_power(:); 
-    current_subjective_outcome = outcomes(:);
+    current_objective_outcome = obj_outcomes(:);
+    current_subjective_outcome = subj_outcomes(:);
     current_stim_intensity = intensities(:);
 
     % 5. STANDARDIZATION (Z-SCORING WITHIN SUBJECT) for alpha power
@@ -171,6 +174,7 @@ for sub_idx = 1:N_SUBJECTS
     all_subject_ids = [all_subject_ids; repmat({subject_id_str}, n_trials, 1)];
     %all_alpha_power = [all_alpha_power; current_alpha_power];
     %all_stim_intensity = [all_stim_intensity; current_stim_intensity];
+    all_objective_outcome = [all_objective_outcome; current_objective_outcome];
     all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome];
     
     disp(['Subject ' subject_id_str ' processed. ' num2str(n_trials) ' trials appended.']);
@@ -188,18 +192,20 @@ alpha_predictor_name = strcat('AlphaPower_Avg_', num2str(pred_window_s * 1000), 
 
 
 % 2. Create the VariableNames cell array explicitly
-column_names = {'SubjectiveOutcome', alpha_predictor_name, 'AlphaPowerRaw', 'StimIntensity', 'StimIntensityRaw', 'SubjectID'};
+column_names = {'ObjectiveOutcome', 'SubjectiveOutcome', alpha_predictor_name, 'AlphaPowerRaw', 'StimIntensity', 'StimIntensityRaw', 'SubjectID'};
 
 
 % --- Now the table creation is simplified and robust ---
-MasterTable = table(all_subjective_outcome, all_alpha_power, all_alpha_power_raw, all_stim_intensity, all_stim_intensity_raw, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
+MasterTable = table(all_objective_outcome, all_subjective_outcome, all_alpha_power, all_alpha_power_raw, all_stim_intensity, all_stim_intensity_raw, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
 
 MasterTable(isnan(MasterTable.SubjectiveOutcome), :) = []; 
 disp('Removed corrupted rows (NaN in SubjectiveOutcome).');
 
 % 2. Convert SubjectID and Outcome to Categorical/Logical for GLMM (Crucial)
 MasterTable.SubjectID = categorical(MasterTable.SubjectID);
+MasterTable.ObjectiveOutcome = logical(MasterTable.ObjectiveOutcome); % Convert 0/1 to logical
 MasterTable.SubjectiveOutcome = logical(MasterTable.SubjectiveOutcome); % Convert 0/1 to logical
+
 
 disp('Aggregation complete. Master table created for GLMM.');
 head(MasterTable)

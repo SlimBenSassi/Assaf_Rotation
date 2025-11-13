@@ -34,7 +34,7 @@ head(MasterTable);
 
 %% Global Variables
 
-MasterTable = MasterTable(MasterTable.StimIntensityRaw <= 3 , :); 
+%MasterTable = MasterTable(MasterTable.StimIntensityRaw <= 3 , :); 
 %MasterTable = MasterTable(MasterTable.StimIntensityRaw >= 3, :); 
 
 
@@ -177,3 +177,53 @@ comparison_table = compare(glme_alpha_stim, glme_alpha_stim_inter);
 
 disp('LRT Results:');
 disp(comparison_table);
+
+
+
+%% Plot beta per contrast level
+
+intensity_levels = unique(MasterTable.StimIntensityRaw);
+
+betas_per_intensity = [];
+
+for i = 1:length(intensity_levels)
+    
+    temp_table = MasterTable(MasterTable.StimIntensityRaw == intensity_levels(i) , :); 
+
+    glme_alpha_temp = fitglme(temp_table, model_formula1, ...
+               'Distribution', 'Binomial', ...
+               'Link', 'logit', 'FitMethod','Laplace');
+
+    beta_temp = glme_alpha_temp.Coefficients.Estimate(2);
+    
+    betas_per_intensity = [betas_per_intensity; beta_temp];
+
+    %disp('Model fitting complete.');
+    %disp(glme_alpha_temp.Coefficients);
+
+end
+
+figure('Units', 'normalized', 'Position', [0.1 0.1 0.5 0.5]);
+
+%scatter(intensity_levels, betas_per_intensity);
+bar_plot = bar(betas_per_intensity);
+hold on;
+
+% Create labels for the X-axis (e.g., 'Bin 1', 'Bin 2', etc.)
+labels = arrayfun(@(x) ['Constrast ' num2str(x)], min(intensity_levels):max(intensity_levels), 'UniformOutput', false);
+
+set(gca, 'XTickLabel', labels);
+ylim([-0.5 0.5]);
+%line(xlim, [baseline_accuracy baseline_accuracy], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 1.5); % Chance line
+
+title('Alpha Coefficient Estimate for models trained on each Stimulus Intensity', 'FontSize', 14);
+xlabel('Difficulty Level');
+ylabel('Accuracy (Proportion Correct)');
+grid on;
+
+
+
+%%
+
+
+

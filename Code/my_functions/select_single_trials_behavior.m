@@ -1,6 +1,6 @@
-function [latencies, codes, intensities, outcomes, n_trials] = select_single_trials_irregular(SDATA, warning_codes_of_interest, all_warning_codes, subj_id)
+function [latencies, codes, intensities, obj_outcomes, subj_outcomes, n_trials] = select_single_trials_behavior(SDATA, warning_codes_of_interest, all_warning_codes, subj_id)
 % SELECT_SINGLE_TRIALS_IRREGULAR Specialized function to link targets to subjective reports 
-% when target codes are faulty. Relies on external behavioral files for Stimulus Intensity and Outcome.
+% when target codes are faulty. Relies on external behavioral files for Stimulus Intensity and Outcomes.
 %
 % INPUTS: SDATA, target_codes, warning_code (073), external_data_path (to find the .mat files), report codes.
 % NOTE: report_unseen_code and report_seen_codes are now redundant inputs, but kept for function compatibility.
@@ -28,6 +28,7 @@ end
 % --- 3. Link Targets, Extract Intensity, and Match ---
 final_target_latencies = [];
 final_target_codes = [];
+y_objective_outcome = [];
 y_subjective_outcome = [];
 stim_intensity_vector = [];
 
@@ -54,7 +55,8 @@ for i = 1:length(trigger_codes)
 
             % --- Extract Stimulus Intensity & Outcome from Behavioral File ---
             raw_contrast_level = beh_table.("Contrast Level")(beh_row_idx);
-            binary_visibility = beh_table.("Binary Visibility")(beh_row_idx); 
+            binary_visibility = beh_table.("Binary Visibility")(beh_row_idx);
+            obj_outcome = beh_table.("Correct/Incorrect")(beh_row_idx);
             
             % CRITICAL FILTER: Only proceed if Contrast Level is NOT 0 (Catch Trial)
             if raw_contrast_level > 0
@@ -63,7 +65,8 @@ for i = 1:length(trigger_codes)
                 final_target_codes = [final_target_codes; 100+raw_contrast_level-1]; % Ignoring time before target, coding only for stim intensity
                 stim_intensity_vector = [stim_intensity_vector; raw_contrast_level]; 
                 
-                % Store the binary outcome (0 or 1) directly from the table
+                % Store the outcome (0 or 1) directly from the table
+                y_objective_outcome = [y_objective_outcome; obj_outcome];
                 y_subjective_outcome = [y_subjective_outcome; binary_visibility]; 
             end 
         end
@@ -74,14 +77,17 @@ end
 % --- 4. Finalize Outputs ---
 latencies = final_target_latencies;
 codes = final_target_codes;
-outcomes = y_subjective_outcome;
+obj_outcomes = y_objective_outcome; 
+subj_outcomes = y_subjective_outcome;
 intensities = stim_intensity_vector; 
 n_trials = length(latencies);
 
 % --- Display Summary ---
 disp('--- Target-Response Linking Summary (IRREGULAR) ---');
 disp(['Total successfully linked and non-catch trials: ' num2str(n_trials)]);
-disp(['Total trials marked SEEN (1): ' num2str(sum(outcomes == 1))]);
-disp(['Total trials marked UNSEEN (0): ' num2str(sum(outcomes == 0))]);
+disp(['Total trials marked Correct (1): ' num2str(sum(obj_outcomes == 1))]);
+disp(['Total trials marked Incorrect (0): ' num2str(sum(obj_outcomes == 0))]);
+disp(['Total trials marked SEEN (1): ' num2str(sum(subj_outcomes == 1))]);
+disp(['Total trials marked UNSEEN (0): ' num2str(sum(subj_outcomes == 0))]);
 
 end
