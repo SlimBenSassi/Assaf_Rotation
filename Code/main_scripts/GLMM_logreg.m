@@ -696,10 +696,10 @@ disp(glme_stim.Coefficients);
 % We use 4 standard deviations around the mean power for the X-axis range.
 stim_mean = mean(MasterTable.StimIntensity);
 stim_std = std(MasterTable.StimIntensity);
-stim_plot_range = linspace(stim_mean - 4*stim_std, stim_mean + 4*stim_std, 100);
+stim_plot_range = linspace(stim_mean - 2*stim_std, stim_mean + 2*stim_std, 100);
 stimraw_mean = mean(MasterTable.StimIntensityRaw);
 stimraw_std = std(MasterTable.StimIntensityRaw);
-stimraw_plot_range = linspace(stimraw_mean - 4*stimraw_std, stimraw_mean + 4*stimraw_std, 100);
+stimraw_plot_range = linspace(stimraw_mean - 2*stimraw_std, stimraw_mean + 2*stimraw_std, 100);
 
 % --- CRUCIAL: Define the Stimulus Intensity for the plot ---
 % To plot a single 2D line, we must fix the StimIntensity (X2). 
@@ -740,6 +740,247 @@ ylabel('Predicted Probability of "Seen" (Y)');
 ylim([0 1]); % Probability scale
 grid on;
 hold off;
+
+
+
+
+
+%% 6. CONDITIONAL PLOT: ACCURACY SLOPES BY ALPHA POWER TERCILE
+
+% --- CONFIGURATION ---
+N_GROUPS = 3; 
+alpha_predictor_var = MasterTable.AlphaPower_Avg_100ms;
+
+% --- 1. Define Tercile Boundaries (Splitting the data by Alpha Power) ---
+% Calculate the 33rd and 66th percentiles across all trials
+tercile_edges = prctile(alpha_predictor_var, [33.33, 66.67]);
+%tercile_edges = prctile(alpha_predictor_var, [50 50]);
+
+% Define labels for the three groups
+group_labels = {'Low Alpha (Bottom 33%)', 'Mid Alpha (Middle 33%)', 'High Alpha (Top 33%)'};
+line_colors = {'b', [0.5 0.5 0.5], 'r'}; % Blue (Low), Gray (Mid), Red (High)
+
+
+% --- 2. Create Logical Indices for the Three Groups ---
+% Group 1: Low Alpha
+idx_low = (alpha_predictor_var <= tercile_edges(1));
+% Group 2: Mid Alpha
+idx_mid = (alpha_predictor_var > tercile_edges(1) & alpha_predictor_var <= tercile_edges(2));
+% Group 3: High Alpha
+idx_high = (alpha_predictor_var > tercile_edges(2));
+
+
+% --- 3. Run Prediction for Each Group's Data ---
+figure('Units', 'normalized', 'Position', [0.1 0.1 0.6 0.7]);
+hold on; 
+
+% Define the raw intensity range for the X-axis plot (for clear labels)
+stim_raw_range = linspace(min(MasterTable.StimIntensityRaw), max(MasterTable.StimIntensityRaw), 100);
+
+% Store the three indexed subsets of the MasterTable
+data_subsets = {MasterTable(idx_low, :), MasterTable(idx_mid, :), MasterTable(idx_high, :)};
+%data_subsets = {MasterTable(idx_low, :), MasterTable(idx_high, :)};
+
+for i = 1:N_GROUPS
+    T_subset = data_subsets{i};
+    
+    % --- Predict outcome for the current Alpha Power subset ---
+    % We use the already fitted glme_control model (Model 4) for prediction.
+    predicted_prob = predict(glme_stim, T_subset);
+    
+    % --- 4. Plotting (Prediction vs. Raw Intensity) ---
+    
+    % Get the raw intensity values for the current subset for the scatter plot X-axis
+    raw_intensity_subset = T_subset.StimIntensityRaw; 
+    
+    % Add scatter points for context (Raw Data)
+    %scatter(raw_intensity_subset, T_subset.SubjectiveOutcome, 20, line_colors{i}, 'filled', 'MarkerFaceAlpha', 0.1); 
+    
+    % --- CRUCIAL STEP: Fit a new Logistic Curve for visualization ONLY ---
+    % Fit a quick Logistic Model on the subset to draw the curve accurately.
+    glme_visual = fitglme(T_subset, 'SubjectiveOutcome ~ StimIntensity + (1|SubjectID)', ...
+                          'Distribution', 'Binomial', 'Link', 'logit', 'Verbose', 0);
+    
+    % Calculate the new LogOdds based on the subset's coefficients
+    beta_0_vis = glme_visual.Coefficients.Estimate(strcmp(glme_visual.Coefficients.Name, '(Intercept)'));
+    beta_z_vis = glme_visual.Coefficients.Estimate(strcmp(glme_visual.Coefficients.Name, 'StimIntensity'));
+    
+    % Calculate the corresponding Z-scores for the raw plot range for accurate curve plotting
+    % This relies on the StimIntensityRaw being linearly related to StimIntensityZ.
+    
+    % For simplification, let's assume the StimIntensityZ ranges from -2 to +2.
+    stim_z_range_plot = linspace(-2, 2, 100); 
+    
+    % Calculate LogOdds and Probability
+    log_odds = beta_0_vis + beta_z_vis * stim_z_range_plot;
+    probability_seen = 1 ./ (1 + exp(-log_odds));
+    
+    % Plot the smooth prediction curve
+    plot(stim_raw_range, probability_seen, 'Color', line_colors{i}, 'LineWidth', 3, 'DisplayName', group_labels{i});
+
+end
+
+% --- Aesthetics ---
+title('Impact of Alpha Power on Fitted Psychometric Curve', 'FontSize', 14);
+xlabel('Raw Stimulus Intensity Level (Difficulty)');
+ylabel('Predicted Probability of "Seen"');
+ylim([0 1]);
+legend('show', 'Location', 'NorthWest');
+grid on;
+hold off;
+
+    
+    %% 7. EMPIRICAL PSYCHOMETRIC CURVE (Raw Data Visualization)
+
+% --- Configuration (Assumes Alpha groups idx_low, idx_mid, idx_high are defined) ---
+intensity_data_raw = MasterTable.StimIntensityRaw; 
+raw_intensity_levels = unique(intensity_data_raw);
+N_LEVELS = length(raw_intensity_levels);
+N_GROUPS = 3; 
+
+% Initialize matrices to store the accuracy and total count for each group x intensity level
+accuracy_matrix_raw = zeros(N_LEVELS, N_GROUPS);
+
+data_subsets_full = {MasterTable(idx_low, :), MasterTable(idx_mid, :), MasterTable(idx_high, :)};
+line_colors = {'b', [0.5 0.5 0.5], 'r'}; 
+group_labels = {'Low Alpha', 'Mid Alpha', 'High Alpha'};
+
+
+% --- Loop through each intensity level and each Alpha group ---
+for i = 1:N_LEVELS % Iterate through 7 contrast levels
+    current_level = raw_intensity_levels(i);
+    
+    for g = 1:N_GROUPS % Iterate through 3 Alpha groups (Low, Mid, High)
+        
+        T_subset = data_subsets_full{g};
+        
+        % Find trials within this subset that match the current intensity level
+        idx_level = (T_subset.StimIntensityRaw == current_level);
+        
+        N_seen = sum(T_subset.SubjectiveOutcome(idx_level));
+        N_total = sum(idx_level);
+        
+        if N_total > 0
+            accuracy_matrix_raw(i, g) = N_seen / N_total; % Proportion of 'Seen' trials
+        else
+            accuracy_matrix_raw(i, g) = NaN;
+        end
+    end
+end
+
+
+% --- Plotting the Empirical Curve ---
+figure('Units', 'normalized', 'Position', [0.1 0.1 0.5 0.7]);
+hold on;
+
+for g = 1:N_GROUPS
+    plot(raw_intensity_levels, accuracy_matrix_raw(:, g), 'Marker', 'o', 'LineStyle', '-', 'Color', line_colors{g}, 'LineWidth', 2, 'DisplayName', group_labels{g});
+end
+
+title('Empirical Psychometric Curve: Observed Awareness by Alpha Power', 'FontSize', 14);
+xlabel('Raw Stimulus Intensity Level');
+ylabel('Observed Proportion of "Seen" Trials');
+legend('show', 'Location', 'SouthEast');
+ylim([0 1]);
+grid on;
+% %control model (Model 4) for prediction.
+%     predicted_prob = predict(glme_stim, T_subset);
+% 
+%     % --- 4. Plotting (Prediction vs. Raw Intensity) ---
+% 
+%     % Get the raw intensity values for the current subset for the scatter plot X-axis
+%     raw_intensity_subset = T_subset.StimIntensityRaw; 
+% 
+%     % Add scatter points for context (Raw Data)
+%     scatter(raw_intensity_subset, T_subset.SubjectiveOutcome, 20, line_colors{i}, 'filled', 'MarkerFaceAlpha', 0.1); 
+% 
+%     % --- CRUCIAL STEP: Fit a new Logistic Curve for visualization ONLY ---
+%     % Fit a quick Logistic Model on the subset to draw the curve accurately.
+%     glme_visual = fitglme(T_subset, 'SubjectiveOutcome ~ StimIntensity + (1|SubjectID)', ...
+%                           'Distribution', 'Binomial', 'Link', 'logit', 'Verbose', 0);
+% 
+%     % Calculate the new LogOdds based on the subset's coefficients
+%     beta_0_vis = glme_visual.Coefficients.Estimate(strcmp(glme_visual.Coefficients.Name, '(Intercept)'));
+%     beta_z_vis = glme_visual.Coefficients.Estimate(strcmp(glme_visual.Coefficients.Name, 'StimIntensity'));
+% 
+%     % Calculate the corresponding Z-scores for the raw plot range for accurate curve plotting
+%     % This relies on the StimIntensityRaw being linearly related to StimIntensityZ.
+% 
+%     % For simplification, let's assume the StimIntensityZ ranges from -2 to +2.
+%     stim_z_range_plot = linspace(-2, 2, 100); 
+% 
+%     % Calculate LogOdds and Probability
+%     log_odds = beta_0_vis + beta_z_vis * stim_z_range_plot;
+%     probability_seen = 1 ./ (1 + exp(-log_odds));
+% 
+%     % Plot the smooth prediction curve
+%     plot(stim_raw_range, probability_seen, 'Color', line_colors{i}, 'LineWidth', 3, 'DisplayName', group_labels{i});
+% 
+% end
+% 
+% % --- Aesthetics ---
+% title('Prediction Failure: Impact of Alpha Power on Intensity Curve', 'FontSize', 14);
+% xlabel('Raw Stimulus Intensity Level (Difficulty)');
+% ylabel('Predicted Probability of "Seen"');
+% ylim([0 1]);
+% legend('show', 'Location', 'NorthWest');
+% grid on;
+% hold off;
+
+%% 7. EMPIRICAL PSYCHOMETRIC CURVE (Raw Data Visualization)
+
+% --- Configuration (Assumes Alpha groups idx_low, idx_mid, idx_high are defined) ---
+intensity_data_raw = MasterTable.StimIntensityRaw; 
+raw_intensity_levels = unique(intensity_data_raw);
+N_LEVELS = length(raw_intensity_levels);
+N_GROUPS = 3; 
+
+% Initialize matrices to store the accuracy and total count for each group x intensity level
+accuracy_matrix_raw = zeros(N_LEVELS, N_GROUPS);
+
+data_subsets_full = {MasterTable(idx_low, :), MasterTable(idx_mid, :), MasterTable(idx_high, :)};
+line_colors = {'b', [0.5 0.5 0.5], 'r'}; 
+group_labels = {'Low Alpha', 'Mid Alpha', 'High Alpha'};
+
+
+% --- Loop through each intensity level and each Alpha group ---
+for i = 1:N_LEVELS % Iterate through 7 contrast levels
+    current_level = raw_intensity_levels(i);
+    
+    for g = 1:N_GROUPS % Iterate through 3 Alpha groups (Low, Mid, High)
+        
+        T_subset = data_subsets_full{g};
+        
+        % Find trials within this subset that match the current intensity level
+        idx_level = (T_subset.StimIntensityRaw == current_level);
+        
+        N_seen = sum(T_subset.SubjectiveOutcome(idx_level));
+        N_total = sum(idx_level);
+        
+        if N_total > 0
+            accuracy_matrix_raw(i, g) = N_seen / N_total; % Proportion of 'Seen' trials
+        else
+            accuracy_matrix_raw(i, g) = NaN;
+        end
+    end
+end
+
+
+% --- Plotting the Empirical Curve ---
+figure('Units', 'normalized', 'Position', [0.1 0.1 0.5 0.7]);
+hold on;
+
+for g = 1:N_GROUPS
+    plot(raw_intensity_levels, accuracy_matrix_raw(:, g), 'Marker', 'o', 'LineStyle', '-', 'Color', line_colors{g}, 'LineWidth', 2, 'DisplayName', group_labels{g});
+end
+
+title('Empirical Psychometric Curve: Observed Awareness by Alpha Power', 'FontSize', 14);
+xlabel('Raw Stimulus Intensity Level');
+ylabel('Observed Proportion of "Seen" Trials');
+legend('show', 'Location', 'SouthEast');
+ylim([0 1]);
+grid on;
+
 
 %% D.2 PREDICTION ACCURACY AND CLASSIFICATION
 

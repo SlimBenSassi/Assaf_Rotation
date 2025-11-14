@@ -32,9 +32,12 @@ MasterTable.SubjectiveOutcome = logical(MasterTable.SubjectiveOutcome);
 disp(['Total trials in model: ' num2str(size(MasterTable, 1))]);
 head(MasterTable);
 
+%copy in case I need it quickly instead of reloading dataset file
+MasterTable_copy = MasterTable;
+
 %% Global Variables
 
-%MasterTable = MasterTable(MasterTable.StimIntensityRaw <= 3 , :); 
+MasterTable = MasterTable(MasterTable.StimIntensity <= 3 , :); 
 %MasterTable = MasterTable(MasterTable.StimIntensityRaw >= 3, :); 
 
 

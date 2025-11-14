@@ -51,7 +51,7 @@ pred_end_sample = pre_samples;
 target_codes = [010:029 210:229]; %all predictive
 report_unseen_code = [231, 241]; % Subjective report code for 'Did Not See' for rhythm 231, for interval 241
 report_seen_codes = [232, 233, 234, 242, 243, 244]; % Subjective report
-warning_codes_of_interest = [071 072]; %for irregular
+warning_codes_of_interest = [071 072 073]; %for irregular
 all_warning_codes = [071, 072, 073];
 %report_unseen_code = [231, 241];
 %report_seen_codes = [23:253];
@@ -76,12 +76,13 @@ currentROI_name = current_ROI_cell{2};
 
 % These vectors will accumulate the data from ALL subjects
 all_subject_ids = {};       % Will store subject labels as strings
-all_alpha_power_raw = [];
+all_alpha_power_raw = {};
 all_alpha_power = [];  % Will store the single-trial Alpha power predictor (X1)
 all_stim_intensity_raw = [];    % Will store the Stimulus Intensity RAW
 all_stim_intensity = [];    % Will store the Stimulus Intensity (X2)
 all_objective_outcome = [];% Will store the binary objective outcome (Y)
 all_subjective_outcome = [];% Will store the binary subjective outcome (Y)
+all_conditions = {};
 
 
 tic
@@ -127,12 +128,12 @@ for sub_idx = 1:N_SUBJECTS
     % Use this line if condition is not irregular
     %[latencies, codes, intensities, outcomes, n_trials] = select_single_trials(SDATA, target_codes, report_unseen_code, report_seen_codes); 
     % Use this line if condition is irregular
-    [latencies, codes, intensities, obj_outcomes, subj_outcomes, n_trials] = select_single_trials_behavior(SDATA, warning_codes_of_interest, all_warning_codes, subject_id_str);
+    [latencies, codes, intensities, obj_outcomes, subj_outcomes, conditions, n_trials] = select_single_trials_behavior(SDATA, warning_codes_of_interest, all_warning_codes, subject_id_str);
     % 2. Downsample trials (Optional, using the max limit)
     % [latencies, codes, outcomes, n_trials] = downsample_trials(latencies, codes, outcomes, MAX_TARGET_TRIALS); 
 
     % 3. Reject trials overlapping with artifact mask
-    [latencies, codes, intensities, obj_outcomes, subj_outcomes, n_trials] = reject_artifact_trials(SDATA, latencies, codes, intensities, obj_outcomes, subj_outcomes, total_epoch_samples, pre_samples);
+    [latencies, codes, intensities, obj_outcomes, subj_outcomes, conditions, n_trials] = reject_artifact_trials(SDATA, latencies, codes, intensities, obj_outcomes, subj_outcomes, conditions, total_epoch_samples, pre_samples);
     
     % 4. Epoching and Time-Frequency Analysis (The most complex step)
     all_epochs_padded = epoch_with_padding(data_matrix, Fs, n_channels, n_trials, latencies, total_epoch_samples, pre_samples, alpha_freq_range);
@@ -142,40 +143,55 @@ for sub_idx = 1:N_SUBJECTS
     
     % 1. Slice the 4D matrix to the prediction window and ROI
     % We select the time window (Dim 1), all frequencies (Dim 2), and the ROI channels (Dim 3).
-    sliced_predictors = alpha_power_envelope(pred_start_sample:pred_end_sample, :, currentROI, :);
+    %sliced_predictors = alpha_power_envelope(pred_start_sample:pred_end_sample, :, currentROI, :);
 
     % 2. Calculate the FINAL mean across Time, Freq, and Channels
     % The result is a 1x1x1xN_Trials array, which needs to be squeezed.
     % We are averaging over Dimension 1 (Time), Dimension 2 (Freq), and Dimension 3 (Channels).
-    current_alpha_power = squeeze(mean(mean(mean(sliced_predictors, 1), 2), 3)); 
+    %current_alpha_power = squeeze(mean(mean(mean(sliced_predictors, 1), 2), 3)); 
     
     % 3. CONVERT TO COLUMN VECTORS FOR AGGREGATION
     % The final aggregated data must be N_Trials x 1 column vectors.
-    current_alpha_power = current_alpha_power(:); 
+    %current_alpha_power = current_alpha_power(:);
+    current_alpha_power = alpha_power_envelope;
     current_objective_outcome = obj_outcomes(:);
     current_subjective_outcome = subj_outcomes(:);
+    current_condition = conditions(:);
     current_stim_intensity = intensities(:);
+
+    n_trials = size(alpha_power_envelope, 4);
+
+    for t = 1:n_trials
+        all_alpha_power_raw = [all_alpha_power_raw; {alpha_power_envelope(:,:,:,t)}];
+    
+        all_stim_intensity_raw = [all_stim_intensity_raw; current_stim_intensity(t)];
+        all_objective_outcome  = [all_objective_outcome;  current_objective_outcome(t)];
+        all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome(t)];
+        all_conditions         = [all_conditions;         current_condition(t)];
+        all_subject_ids        = [all_subject_ids;        {subject_id_str}];
+    end
 
     % 5. STANDARDIZATION (Z-SCORING WITHIN SUBJECT) for alpha power
     
-    % Apply Z-score to Alpha Power (X1) and stimintensity
-    current_alpha_power_z = zscore_vector(current_alpha_power);
-    current_stim_intensity_z = zscore_vector(current_stim_intensity);
-
-% --- 6. Append to Master Vectors (The Aggregation) ---
-    % Append the Z-scored versions!
-    all_alpha_power = [all_alpha_power; current_alpha_power_z];
-    all_alpha_power_raw = [all_alpha_power_raw; current_alpha_power];
-    all_stim_intensity = [all_stim_intensity; current_stim_intensity_z];
-    all_stim_intensity_raw = [all_stim_intensity_raw; current_stim_intensity];
-
-    % 4. Append to Master Vectors (The Aggregation) ---
-    % NOTE: Subject ID must be stored as a cell array of strings for GLMM.
-    all_subject_ids = [all_subject_ids; repmat({subject_id_str}, n_trials, 1)];
-    %all_alpha_power = [all_alpha_power; current_alpha_power];
-    %all_stim_intensity = [all_stim_intensity; current_stim_intensity];
-    all_objective_outcome = [all_objective_outcome; current_objective_outcome];
-    all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome];
+%     % Apply Z-score to Alpha Power (X1) and stimintensity
+%     current_alpha_power_z = zscore_vector(current_alpha_power);
+%     current_stim_intensity_z = zscore_vector(current_stim_intensity);
+% 
+% % --- 6. Append to Master Vectors (The Aggregation) ---
+%     % Append the Z-scored versions!
+%     all_alpha_power = [all_alpha_power; current_alpha_power_z];
+%     all_alpha_power_raw = [all_alpha_power_raw; {current_alpha_power}];
+%     all_stim_intensity = [all_stim_intensity; current_stim_intensity_z];
+%     all_stim_intensity_raw = [all_stim_intensity_raw; current_stim_intensity];
+% 
+%     % 4. Append to Master Vectors (The Aggregation) ---
+%     % NOTE: Subject ID must be stored as a cell array of strings for GLMM.
+%     all_subject_ids = [all_subject_ids; repmat({subject_id_str}, n_trials, 1)];
+%     %all_alpha_power = [all_alpha_power; current_alpha_power];
+%     %all_stim_intensity = [all_stim_intensity; current_stim_intensity];
+%     all_objective_outcome = [all_objective_outcome; current_objective_outcome];
+%     all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome];
+%     all_conditions = [all_conditions; current_condition];
     
     disp(['Subject ' subject_id_str ' processed. ' num2str(n_trials) ' trials appended.']);
 % --- END OF SUBJECT LOOP ---
@@ -188,15 +204,17 @@ toc
 
 
 % 1. Calculate the dynamic predictor column name
-alpha_predictor_name = strcat('AlphaPower_Avg_', num2str(pred_window_s * 1000), 'ms');% NOTE: We use [] and strings/char arrays to guarantee compatibility here.
+%alpha_predictor_name = strcat('AlphaPower_Avg_', num2str(pred_window_s * 1000), 'ms');% NOTE: We use [] and strings/char arrays to guarantee compatibility here.
+%alpha_predictor_name = strcat('AlphaPower_Avg_', num2str(pred_window_s * 1000), 'ms');% NOTE: We use [] and strings/char arrays to guarantee compatibility here.
 
 
 % 2. Create the VariableNames cell array explicitly
-column_names = {'ObjectiveOutcome', 'SubjectiveOutcome', alpha_predictor_name, 'AlphaPowerRaw', 'StimIntensity', 'StimIntensityRaw', 'SubjectID'};
+%column_names = {'ObjectiveOutcome', 'SubjectiveOutcome', 'Condition', alpha_predictor_name, 'AlphaPowerRaw', 'StimIntensity', 'StimIntensityRaw', 'SubjectID'};
+column_names = {'ObjectiveOutcome', 'SubjectiveOutcome', 'Condition', 'AlphaAmplitude', 'StimIntensity', 'SubjectID'};
 
 
 % --- Now the table creation is simplified and robust ---
-MasterTable = table(all_objective_outcome, all_subjective_outcome, all_alpha_power, all_alpha_power_raw, all_stim_intensity, all_stim_intensity_raw, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
+MasterTable = table(all_objective_outcome, all_subjective_outcome, all_conditions, all_alpha_power_raw, all_stim_intensity_raw, all_subject_ids, 'VariableNames', column_names); % <-- Uses clean variable
 
 MasterTable(isnan(MasterTable.SubjectiveOutcome), :) = []; 
 disp('Removed corrupted rows (NaN in SubjectiveOutcome).');
@@ -205,7 +223,7 @@ disp('Removed corrupted rows (NaN in SubjectiveOutcome).');
 MasterTable.SubjectID = categorical(MasterTable.SubjectID);
 MasterTable.ObjectiveOutcome = logical(MasterTable.ObjectiveOutcome); % Convert 0/1 to logical
 MasterTable.SubjectiveOutcome = logical(MasterTable.SubjectiveOutcome); % Convert 0/1 to logical
-
+%MasterTable.Condition = categorical(MasterTable.Condition);
 
 disp('Aggregation complete. Master table created for GLMM.');
 head(MasterTable)
@@ -220,7 +238,7 @@ head(MasterTable)
 RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
-final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_Predictive_Corrected.mat');
+final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_All.mat');
 
 % 4. Save the table
 save(final_save_path, 'MasterTable', '-v7.3');
