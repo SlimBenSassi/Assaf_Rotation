@@ -78,9 +78,9 @@ for f_bin = 1:N_FREQ_BINS
         
         % B. Feature Extraction: Slice and Average for this specific [t, f] bin
         % Data is [Time x Freqs x Channels x Trials]
-        %sliced_power = alpha_data_cube(time_bin_start_sample:time_bin_end_sample, ...
+        sliced_power = alpha_data_cube(time_bin_start_sample:time_bin_end_sample, ...
                                        %freq_start_idx:freq_end_idx, :);
-        sliced_power = alpha_data_cube(time_bin_start_sample:time_bin_end_sample, f_bin, :);
+        %sliced_power = alpha_data_cube(time_bin_start_sample:time_bin_end_sample, f_bin, :);
         % Average raw power across Time (1), Freq (2), and Channels (3)
         current_alpha_predictor = squeeze(mean(mean(sliced_power, 1), 2));
         

@@ -151,7 +151,7 @@ end
 
 %% A.1 LINEAR ALPHA SLOPE PER INTENSITY (NO INTERACTION TERM)
 
-data_condition = MasterTable_Irregular;
+data_condition = MasterTable_Interval;
 outcome_type = 'Objective';
 
 if strcmp(outcome_type, 'Subjective')
@@ -285,6 +285,7 @@ beta2 = glme_alpha.Coefficients.Estimate(2); % StimZ
 beta3 = glme_alpha.Coefficients.Estimate(4); % Alpha × StimZ interaction
 beta4 = glme_alpha.Coefficients.Estimate(6); % Alpha × StimZ^2 interaction
 
+disp(glme_alpha.Coefficients)
 
 % ---- 3. Compute simple slopes: beta_alpha(bin) = beta1 + beta3 * meanStimZ(bin) ----
 beta_alpha_per_bin2 = beta1 + beta3 * meanZ_per_bin + beta4 * meanZ_per_bin * 2;
@@ -315,7 +316,7 @@ grid on
 
 % --- 1. Create the Grouped Matrix ---
 % The matrix must be [N_Bins x N_Models]
-beta_comparison_matrix = [betas_per_intensity, beta_alpha_per_bin, beta_alpha_per_bin2];
+beta_comparison_matrix = [betas_per_intensity, beta_alpha_per_bin, beta_alpha   ];
 
 % --- 2. Create the Figure and Bar Plot ---
 figure('Units', 'normalized', 'Position', [0.1 0.1 0.6 0.6]);
@@ -335,10 +336,9 @@ set(gca, 'XTickLabel', intensity_labels);
 title('Predictive Power (Beta) by Intensity: Simple vs. Complex Model', 'FontSize', 14);
 xlabel('Stimulus Intensity Level (Bins)');
 ylabel('Alpha Power Beta Coefficient (Log-Odds)');
-legend({'No Interaction Model', 'Linear Interaction Model', 'Quadratic Interaction Model'}, 'Location', 'NorthWest');
+legend({'Simple Model (\alpha Only)', 'Complex Model (\alpha at Specific Intensity)'}, 'Location', 'NorthWest');
 grid on;
 hold off;
-
 
 
 %% SHORT EXPLORATIION OF CALIBRATION
