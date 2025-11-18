@@ -1,4 +1,4 @@
-function [latencies, codes, intensities, obj_outcomes, subj_outcomes, conditions, n_trials] = select_single_trials_behavior(SDATA, warning_codes_of_interest, all_warning_codes, subj_id)
+function [latencies, codes, intensities, obj_outcomes, subj_outcomes, conditions, isis, n_trials] = select_single_trials_behavior(SDATA, warning_codes_of_interest, all_warning_codes, subj_id)
 % SELECT_SINGLE_TRIALS_IRREGULAR Specialized function to link targets to subjective reports 
 % when target codes are faulty. Relies on external behavioral files for Stimulus Intensity and Outcomes.
 %
@@ -31,6 +31,7 @@ final_target_codes = [];
 y_objective_outcome = [];
 y_subjective_outcome = [];
 y_condition = [];
+y_isi = [];
 stim_intensity_vector = [];
 
 eeg_trial_counter = 0;
@@ -59,6 +60,7 @@ for i = 1:length(trigger_codes)
             binary_visibility = beh_table.("Binary Visibility")(beh_row_idx);
             obj_outcome = beh_table.("Correct/Incorrect")(beh_row_idx);
             condition = beh_table.("Condition")(beh_row_idx);
+            isi = beh_table.("Irregular Target Time")(beh_row_idx);
             
             % CRITICAL FILTER: Only proceed if Contrast Level is NOT 0 (Catch Trial)
             if raw_contrast_level > 0
@@ -71,6 +73,7 @@ for i = 1:length(trigger_codes)
                 y_objective_outcome = [y_objective_outcome; obj_outcome];
                 y_subjective_outcome = [y_subjective_outcome; binary_visibility]; 
                 y_condition = [y_condition; condition];
+                y_isi = [y_isi; isi];
             end 
         end
     end 
@@ -83,6 +86,7 @@ codes = final_target_codes;
 obj_outcomes = y_objective_outcome; 
 subj_outcomes = y_subjective_outcome;
 conditions = y_condition;
+isis = y_isi;
 intensities = stim_intensity_vector; 
 n_trials = length(latencies);
 

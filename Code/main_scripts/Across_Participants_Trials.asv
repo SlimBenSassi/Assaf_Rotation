@@ -30,7 +30,7 @@ disp(['Selected ' num2str(N_SUBJECTS) ' subject files. Proceeding to loop...']);
 
 %% --- Global Variables ---
 
-alpha_freq_range = [7, 13]; % Alpha band for filtering (Hz)
+alpha_freq_range = [8, 12]; % Alpha band for filtering (Hz)
 
 % --- Time Variables --- %
 Fs = 1024; %change if needed
@@ -240,7 +240,7 @@ head(MasterTable)
 RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
-final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table__not_all_cuz_outofmemory.mat');
+final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_All.mat');
 
 % 4. Save the table
 save(final_save_path, 'MasterTable', '-v7.3');
