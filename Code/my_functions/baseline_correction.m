@@ -1,4 +1,4 @@
-function power_db = baseline_correction(power_cube, Fs, pre_event_sec)
+function power_db = baseline_correction(power_cube, Fs, pre_event_sec, baseline_start_sec, baseline_end_sec)
 % NORMALIZE_POWER_DB Converts raw power into decibels (dB) relative to a baseline.
 %
 % INPUTS:
@@ -6,9 +6,8 @@ function power_db = baseline_correction(power_cube, Fs, pre_event_sec)
 %   Fs: Sampling rate.
 %   pre_event_sec: Duration of the pre-event window (e.g., 0.5s).
 
-% --- 1. Define Baseline Samples (e.g., -500ms to -200ms) ---
-baseline_end_sec = -0.300; 
-baseline_start_sec = -0.480;
+% --- 1. Define Baseline Samples ---
+
 time_zero_sample = round(pre_event_sec * Fs); 
 
 baseline_start_sample = time_zero_sample + round(baseline_start_sec * Fs); 

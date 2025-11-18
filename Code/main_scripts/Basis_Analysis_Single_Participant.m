@@ -749,7 +749,7 @@ hold on;
 % 1. Create a logical mask for significance (p < 0.05)
 % NOTE: We assume the target is p < 0.05, but we use p < 0.5 for demonstration 
 % if your true p-values are high due to low N.
-significant_mask = (p_map_matrix' < 0.05); 
+significant_mask = (p_map_matrix' < 0.05);
 
 % 2. Plot the contour lines using the mask
 [~, h_contour] = contour(time_vec_sec, freq_vec, significant_mask, [0.5 0.5], 'LineWidth', 3, 'LineColor', 'w', 'LineStyle', ':');

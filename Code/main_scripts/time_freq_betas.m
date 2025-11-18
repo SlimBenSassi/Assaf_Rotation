@@ -22,9 +22,11 @@ end
 
 master_table_file = fullfile(filepath, filename);
 
+tic
 
 % Load the MasterTable (contains SubjectID, AlphaPower, StimIntensity, SubjectiveOutcome)
 load(master_table_file, 'MasterTable');
+toc
 disp('Master Table loaded successfully.');
 
 % Ensure data types are correct for the GLMM function
@@ -46,10 +48,13 @@ DO_BASELINE_CORRECTION = true;
 Fs = 1024; % Assuming Fs is 1024 Hz
 n_channels = 71; %change if needed
 PRE_EVENT_SEC = 0.5; % Assumed pre-stimulus window
-N_TIME_BINS = 1;
-N_FREQ_BINS = 1;
+N_TIME_BINS = 10;
+N_FREQ_BINS = 5; % Code not ready for other values yet
 alpha_freq_range = [8 12];
-time_window_sec = [-0.020 0];
+time_window_sec = [-0.350 0];
+baseline_start_sec = -0.490; % to avoid rounding problems not taking -500ms
+baseline_end_sec = -0.400; 
+
 
 
 % --- Channels --- %
@@ -65,20 +70,33 @@ currentROI_name = current_ROI_cell{2};
 
 %% BASELINE_CORRECTION
 
+tic
 if DO_BASELINE_CORRECTION
     for i = 1:height(MasterTable)
-        MasterTable.AlphaAmplitude{i} = baseline_correction(MasterTable.AlphaAmplitude{i}, Fs, PRE_EVENT_SEC);
+        MasterTable.AlphaAmplitude{i} = baseline_correction(MasterTable.AlphaAmplitude{i}, Fs, PRE_EVENT_SEC, baseline_start_sec, baseline_end_sec);
     end
     disp('All single-trial Alpha features are now baseline-normalized (dB).');
 end
+toc
 
-%% AVERAGE DATA OF ROI
+%% AVERAGE DATA OF ROI (only run this if data file loaded isn't already ROI-averaged)
 
 % 1. Average across the Channel Dimension (Dimension 3)
 % Slices the power envelope to the current ROI channels and averages their values.
+tic
 for i = 1:height(MasterTable)
         MasterTable.AlphaAmplitude{i} = squeeze(mean(MasterTable.AlphaAmplitude{i}(:, :, currentROI), 3));
 end
+toc
+disp('All single-trial Alpha features are now averaged over ROI channels.');
+
+%% Z-SCORING (ASSUMES CHANNELS ALREADY AVERAGED)
+
+tic
+MasterTable = zscore_data(MasterTable, Fs, PRE_EVENT_SEC, baseline_start_sec, baseline_end_sec);
+toc
+
+disp('All single-trial Alpha Amplitude and StimIntensity data is now Z-scored within condition.');
 
 %% DIFFERENT DATASETS    
 
@@ -90,15 +108,25 @@ condition_codes = double(MasterTable.Condition);
 % 1. MasterTable_Predictive (Condition < 3: Keep Rhythm and Interval)
 MasterTable_Predictive = MasterTable(condition_codes < 3, :);
 
+% 1.a Rhythm
+MasterTable_Rhythm = MasterTable(condition_codes == 1, :);
+
+% 1.b Interval
+MasterTable_Interval = MasterTable(condition_codes == 2, :);
+
 % 2. MasterTable_Irregular (Condition == 3: Keep Irregular)
 MasterTable_Irregular = MasterTable(condition_codes == 3, :);
 
 %% TIME-FREQUENCY REGRESSION MAP
 
+outcome_type = 'Subjective';
+
 tic
-[BetaMap, PValueMap, TimeBins, FreqBins] = tf_regression_map(MasterTable_Predictive, Fs, time_window_sec, alpha_freq_range, N_TIME_BINS, N_FREQ_BINS);
+[BetaMap, PValueMap, TimeBins, FreqBins] = tf_regression_map(MasterTable_Irregular, Fs, time_window_sec, alpha_freq_range, N_TIME_BINS, N_FREQ_BINS, outcome_type);
 toc
 
 
-%%
+%% INTERACTION ANALYSIS
+
+
 

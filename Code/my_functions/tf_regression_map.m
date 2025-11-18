@@ -1,4 +1,4 @@
-function [BetaMap, PValueMap, TimeBins, FreqBins] = tf_regression_map(MasterTable, Fs, time_window_sec, freq_range_hz, N_TIME_BINS, N_FREQ_BINS)
+function [BetaMap, PValueMap, TimeBins, FreqBins] = tf_regression_map(MasterTable, Fs, time_window_sec, freq_range_hz, N_TIME_BINS, N_FREQ_BINS, outcome)
 % COMPUTE_TF_REGRESSION_MAP Fits a GLMM for every time-frequency bin and returns a map of Beta coefficients.
 % This is the functional equivalent of the Time-Frequency Regression Map.
 %
@@ -38,6 +38,28 @@ catch ME
     error('Could not unpack AlphaAmplitude cell array. Check final column type in MasterTable.');
 end
 
+%Calculate the FINAL mean across Time, Freq, and Channels
+% The result is a 1x1x1xN_Trials array, which needs to be squeezed.
+% We are averaging over Dimension 1 (Time), Dimension 2 (Freq), and Dimension 3 (Channels).
+sliced_power = alpha_data_cube(start_sample:end_sample, :, :); 
+% Average raw power across Time (1), Freq (2), and Channels (3)
+mean_alpha_predictor = squeeze(mean(mean(sliced_power, 1), 2));
+
+T_temp = MasterTable;
+T_temp.AlphaPower = double(mean_alpha_predictor(:)); % Predictor X1
+T_temp.StimIntensityZ = double(T_temp.StimIntensityZ); % X2 (already Z-scored)
+
+if strcmp(outcome, 'Subjective')
+   model_formula = 'SubjectiveOutcome ~ AlphaPower + (1|SubjectID)';
+else
+   model_formula = 'ObjectiveOutcome ~ AlphaPower + (1|SubjectID)';
+end
+
+% Fit GLMM (Only need the final P-value and Beta)
+glme = fitglme(T_temp, model_formula, ...
+                       'Distribution', 'Binomial', 'Link', 'logit', 'FitMethod', 'Laplace');
+disp(glme.Coefficients);
+
 
 % --- 2. THE BETA-MAP REGRESSION LOOP (Time x Frequency) ---
 
@@ -66,16 +88,16 @@ for f_bin = 1:N_FREQ_BINS
         % Create a temporary table by replacing the Z-scored AlphaPower column
         T_temp = MasterTable;
         T_temp.AlphaPower = double(current_alpha_predictor(:)); % Predictor X1
-        T_temp.StimIntensity = double(T_temp.StimIntensity); % X2 (already Z-scored)
+        T_temp.StimIntensitZ = double(T_temp.StimIntensityZ); % X2 (already Z-scored)
+
 
         % D. Fit GLMM (Only need the final P-value and Beta)
-        glme = fitglme(T_temp, 'ObjectiveOutcome ~ AlphaPower + (1|SubjectID)', ...
+        glme = fitglme(T_temp, model_formula, ...
                        'Distribution', 'Binomial', 'Link', 'logit', 'FitMethod', 'Laplace', 'Verbose', 0);
         
         % E. Extract Results (Find the AlphaPower Main Effect Beta/P-Value)
         T_coeff = glme.Coefficients;
         alpha_row = strcmp(T_coeff.Name, 'AlphaPower');
-        glme.Coefficients;
 
         BetaMap(t_bin, f_bin) = T_coeff.Estimate(alpha_row);
         PValueMap(t_bin, f_bin) = T_coeff.pValue(alpha_row);
@@ -106,13 +128,19 @@ colorbar;
 max_abs_beta = max(abs(BetaMap(:)));
 clim([-max_abs_beta, max_abs_beta]); 
 colormap('jet'); % Use a high-contrast diverging colormap (jet or parula)
+hold on; 
+
+% --- 1. Create a logical mask for significance (p < 0.05) ---
+significant_mask = (PValueMap' < 0.1); % 0.025 because our hypothesis is one-tailed 
+
+% 2. Plot the contour lines using the mask
+[~, h_contour] = contour(TimeBins, FreqBins, significant_mask, [0.5 0.5], 'LineWidth', 3, 'LineColor', 'w', 'LineStyle', ':');
 
 % --- Aesthetics and Markers ---
 hold on;
 line([0 0], ylim, 'Color', 'w', 'LineWidth', 2, 'LineStyle', '--'); % Vertical line at stimulus onset (t=0)
 %set(gca, 'XDir', 'reverse'); % Sets Time (X-axis) to flow backward (Standard ERP)
-
-title(['Time-Frequency Beta Map (Alpha Power Predicts Awareness)'], 'FontSize', 14);
+title(['Time-Frequency Beta Map (Alpha Power Predicts ' outcome ' Outcome)'], 'FontSize', 10);
 xlabel('Time relative to stimulus (s)');
 ylabel('Frequency (Hz)');
 grid on;
