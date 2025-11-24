@@ -1,4 +1,4 @@
-function [BetaMap, PValueMap, TimeBins, FreqBins] = tf_regression_map(MasterTable, Fs, time_window_sec, freq_range_hz, N_TIME_BINS, N_FREQ_BINS, outcome)
+function [BetaMap, PValueMap, TimeBins, FreqBins] = tf_regression_map(MasterTable, Fs, time_window_sec, freq_range_hz, N_TIME_BINS, N_FREQ_BINS, outcome, SHOW)
 % COMPUTE_TF_REGRESSION_MAP Fits a GLMM for every time-frequency bin and returns a map of Beta coefficients.
 % This is the functional equivalent of the Time-Frequency Regression Map.
 %
@@ -22,6 +22,7 @@ total_window_samples = end_sample - start_sample + 1;
 
 samples_per_time_bin = floor(total_window_samples / N_TIME_BINS);
 freqs_per_bin = (freq_range_hz(2) - freq_range_hz(1)) / N_FREQ_BINS;
+all_freqs = freq_range_hz(1):freq_range_hz(2);
 
 % Initialize output matrices
 BetaMap = zeros(N_TIME_BINS, N_FREQ_BINS);
@@ -66,8 +67,10 @@ disp(glme.Coefficients);
 for f_bin = 1:N_FREQ_BINS
     
     % Define the current frequency range indices
-    %freq_start_idx = round(freq_range_hz(1) + (f_bin - 1) * freqs_per_bin);
-    %freq_end_idx = round(freq_range_hz(1) + f_bin * freqs_per_bin);
+    freq_start= round(freq_range_hz(1) + (f_bin - 1) * freqs_per_bin);
+    freq_end = round(freq_range_hz(1) + f_bin * freqs_per_bin);
+    freq_start_idx = find(all_freqs==freq_start);
+    freq_end_idx = find(all_freqs==freq_end);
     %disp(freq_start_idx:freq_end_idx)
     
     for t_bin = 1:N_TIME_BINS
@@ -79,7 +82,7 @@ for f_bin = 1:N_FREQ_BINS
         % B. Feature Extraction: Slice and Average for this specific [t, f] bin
         % Data is [Time x Freqs x Channels x Trials]
         sliced_power = alpha_data_cube(time_bin_start_sample:time_bin_end_sample, ...
-                                       %freq_start_idx:freq_end_idx, :);
+                                       freq_start_idx:freq_end_idx, :);
         %sliced_power = alpha_data_cube(time_bin_start_sample:time_bin_end_sample, f_bin, :);
         % Average raw power across Time (1), Freq (2), and Channels (3)
         current_alpha_predictor = squeeze(mean(mean(sliced_power, 1), 2));
@@ -111,38 +114,41 @@ FreqBins = linspace(freq_range_hz(1), freq_range_hz(2), N_FREQ_BINS);
 
 disp('Time-Frequency Regression Map computation finished.');
 
-figure('Name', 'Regression Beta Map');
+if SHOW
+    figure('Name', 'Regression Beta Map');
+    
+    % --- 1. Plot the Beta Map using imagesc ---
+    % We plot the BetaMap directly. No need for transpose if the TFR function
+    % outputted [Time x Freqs]. We rely on the axes labels to handle orientation.
+    imagesc(TimeBins, FreqBins, BetaMap'); 
+    % NOTE: Assuming BetaMap needs to be transposed (') to align [Freqs x Time] for imagesc.
+    axis xy; % CRITICAL: Flips the Y-axis so low frequencies are at the bottom.
+    % Reverse X-axis direction
+    %set(gca, 'YDir', 'reverse');
+    colorbar;
+    
+    % --- Set Color Limits (Crucial for symmetrical interpretation) ---
+    % Find the max absolute value to center the color map symmetrically around zero.
+    max_abs_beta = max(abs(BetaMap(:)));
+    clim([-max_abs_beta, max_abs_beta]); 
+    colormap('jet'); % Use a high-contrast diverging colormap (jet or parula)
+    hold on; 
+    
+    % --- 1. Create a logical mask for significance (p < 0.05) ---
+    significant_mask = (PValueMap' < 0.1) & (BetaMap' < 0); % 0.025 because our hypothesis is one-tailed 
+    
+    % 2. Plot the contour lines using the mask
+    [~, h_contour] = contour(TimeBins, FreqBins, significant_mask, [0.5 0.5], 'LineWidth', 3, 'LineColor', 'w', 'LineStyle', ':');
+    
+    % --- Aesthetics and Markers ---
+    hold on;
+    line([0 0], ylim, 'Color', 'w', 'LineWidth', 2, 'LineStyle', '--'); % Vertical line at stimulus onset (t=0)
+    %set(gca, 'XDir', 'reverse'); % Sets Time (X-axis) to flow backward (Standard ERP)
+    title(['Time-Frequency Beta Map (Alpha Power Predicts ' outcome ' Outcome)'], 'FontSize', 10);
+    xlabel('Time relative to stimulus (s)');
+    ylabel('Frequency (Hz)');
+    grid on;
+    hold off;
+end
 
-% --- 1. Plot the Beta Map using imagesc ---
-% We plot the BetaMap directly. No need for transpose if the TFR function
-% outputted [Time x Freqs]. We rely on the axes labels to handle orientation.
-imagesc(TimeBins, FreqBins, BetaMap'); 
-% NOTE: Assuming BetaMap needs to be transposed (') to align [Freqs x Time] for imagesc.
-axis xy; % CRITICAL: Flips the Y-axis so low frequencies are at the bottom.
-% Reverse X-axis direction
-%set(gca, 'YDir', 'reverse');
-colorbar;
-
-% --- Set Color Limits (Crucial for symmetrical interpretation) ---
-% Find the max absolute value to center the color map symmetrically around zero.
-max_abs_beta = max(abs(BetaMap(:)));
-clim([-max_abs_beta, max_abs_beta]); 
-colormap('jet'); % Use a high-contrast diverging colormap (jet or parula)
-hold on; 
-
-% --- 1. Create a logical mask for significance (p < 0.05) ---
-significant_mask = (PValueMap' < 0.1); % 0.025 because our hypothesis is one-tailed 
-
-% 2. Plot the contour lines using the mask
-[~, h_contour] = contour(TimeBins, FreqBins, significant_mask, [0.5 0.5], 'LineWidth', 3, 'LineColor', 'w', 'LineStyle', ':');
-
-% --- Aesthetics and Markers ---
-hold on;
-line([0 0], ylim, 'Color', 'w', 'LineWidth', 2, 'LineStyle', '--'); % Vertical line at stimulus onset (t=0)
-%set(gca, 'XDir', 'reverse'); % Sets Time (X-axis) to flow backward (Standard ERP)
-title(['Time-Frequency Beta Map (Alpha Power Predicts ' outcome ' Outcome)'], 'FontSize', 10);
-xlabel('Time relative to stimulus (s)');
-ylabel('Frequency (Hz)');
-grid on;
-hold off;
 end
