@@ -1,0 +1,139 @@
+function [baseline_raw, isi_out, orientation_out, orientation_reseponse_out, outcome_missing, n_trials] = ...
+         extract_baseline_orientation(SDATA, warning_codes_of_interest, all_warning_codes, subj_id)
+
+% -------------------------------------------------------------
+%  This function extracts ONLY:
+%   • baseline (with padding): -200ms → +100ms relative to WARNING
+%   • Irregular Target Time
+%   • Orientation
+%   • Orientation Reseponse   (yes, typo kept intentionally)
+%
+%  The extracted trial order MUST match the order produced by 
+%  select_single_trials_behavior, so later merging is perfect.
+% -------------------------------------------------------------
+
+Fs = SDATA.info.sampling_rate;
+data = SDATA.data;   % EEG matrix (samples × channels)
+n_channels = size(data,2);
+
+status_vector = SDATA.events.triggerChannel;
+trigger_indices = find(status_vector ~= 0);
+trigger_codes   = status_vector(trigger_indices);
+
+% --------- Load behavioral file (same as in your main function) ----------
+full_external_path = fullfile( ...
+    '\\wks3\pr_breska\el-Christina\SxA\SxA_Data\Behaviour Preprocessed', ...
+    ['SxA_ResultsSubject' subj_id '_Session2.mat'] );
+
+try
+    external_data = load(full_external_path);
+    beh_table = external_data.subresults.data;
+catch ME
+    error(['Could not load behavioral file: ' ME.message]);
+end
+
+% --- OUTPUT VECTORS ---
+baseline_raw = {};
+isi_out = [];
+orientation_out = [];
+orientation_reseponse_out = [];
+
+% --- BASELINE WINDOWS (in samples) ---
+usable_baseline_ms = [-100 0];   % NOT extracted directly – we extract padded version
+pad_before_ms      = 100;
+pad_after_ms       = 100;
+
+extract_start_ms = usable_baseline_ms(1) - pad_before_ms;   % -200 ms
+extract_end_ms   = usable_baseline_ms(2) + pad_after_ms;    % +100 ms
+
+extract_start_samp = round((extract_start_ms/1000) * Fs);
+extract_end_samp   = round((extract_end_ms/1000) * Fs);
+
+% --- Counter to sync with behavioral table ---
+eeg_trial_counter = 0;
+
+% =====================================================================
+%                       MAIN TRIGGER LOOP
+% =====================================================================
+
+outcome_missing = [];
+
+for i = 1:length(trigger_codes)
+
+    current_code = trigger_codes(i);
+
+    % Count every warning code as one EEG trial
+    if ismember(current_code, all_warning_codes)
+        eeg_trial_counter = eeg_trial_counter + 1;
+    end
+
+    % If this warning is NOT one of the conditions we keep → skip
+    if ~ismember(current_code, warning_codes_of_interest)
+        continue
+    end
+
+    % Behavioral index for this trial
+    beh_row_idx = eeg_trial_counter;
+
+    % Safety check
+    if beh_row_idx > height(beh_table)
+        warning('Behavior table ended early — skipping');
+        continue;
+    end
+
+    % Extract behavioral variables
+    isi = beh_table.("Irregular Target Time")(beh_row_idx);
+    orientation = beh_table.("Orientation")(beh_row_idx);
+    orientation_reseponse = beh_table.("Orientation Reseponse")(beh_row_idx); % typo kept
+    binary_visibility = beh_table.("Binary Visibility")(beh_row_idx);
+    contrast = beh_table.("Contrast Level")(beh_row_idx);
+
+
+
+    % ----------------------------------------------------
+    %             Skip trial if invalid
+    % ----------------------------------------------------
+    if isnan(orientation_reseponse) && contrast == 0
+        continue  % skip this trial
+    end
+    
+    % ----------------------------------------------------
+    % Outcome missing flag
+    % ----------------------------------------------------
+    is_missing = isnan(orientation_reseponse) || isnan(binary_visibility);
+    outcome_missing(end+1,1) = is_missing;
+    % ----------------------------------------------------
+    %             Extract baseline around WARNING
+    % ----------------------------------------------------
+    warning_latency = trigger_indices(i);
+    start_idx = warning_latency + extract_start_samp;
+    end_idx   = warning_latency + extract_end_samp;
+
+    % Bound checks
+    if start_idx < 1 || end_idx > size(data,1)
+        % Skip trials too close to start/end of recording
+        continue;
+    end
+
+    % Extract padded baseline segment
+    baseline_segment = data(start_idx:end_idx, :);  % (time × channels)
+
+    % ----------------------------------------------------
+    % Store outputs (only valid trials reach here)
+    % ----------------------------------------------------
+    baseline_raw{end+1,1} = baseline_segment;
+    isi_out(end+1,1) = isi;
+    orientation_out(end+1,1) = orientation;
+    orientation_reseponse_out(end+1,1) = orientation_reseponse;
+
+end
+
+
+
+n_trials = length(isi_out);
+
+disp(['Extracted baseline + orientation for ' num2str(n_trials) ' trials.']);
+
+
+
+end
