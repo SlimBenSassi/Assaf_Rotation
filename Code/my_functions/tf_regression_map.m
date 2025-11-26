@@ -5,6 +5,7 @@ function [BetaMap, PValueMap, TimeBins, FreqBins] = tf_regression_map(MasterTabl
 % INPUTS (Assumed): MasterTable (with AlphaAmplitude cell array), Fs, and analysis windows.
 
 disp('--- Starting Time-Frequency GLMM Map (TFRM) ---');
+disp(SHOW);
 
 % --- 1. CONFIGURATION AND INITIALIZATION ---
 PRE_EVENT_SEC = 0.500; % Assumed baseline start from your pipeline

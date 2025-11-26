@@ -160,13 +160,73 @@ for row = 1:length(outcome_types)
     end
 end
 
+%%
+% Generate a 3x2 figure for different outcome types and datasets
+outcome_types = {'Objective', 'Subjective'};
+datasets = {{MasterTable_Rhythm, 'Rhythm'}, {MasterTable_Interval, 'Interval'}, {MasterTable_Irregular, 'Irregular'}};
 
+% Define colors for clarity
+colors = {[0, 0.447, 0.741], [0.85, 0.325, 0.098]}; % Blue for 0, Red for 1
+outcome_labels = {'Subjective Outcome = 0 (Failure/No-Percept)', 'Subjective Outcome = 1 (Success/Percept)'};
+
+% Create a 3x2 figure for different outcome types and datasets
+f = figure('Units','normalized','Position',[0.1 0.1 0.8 0.8]);
+
+for row = 1:length(outcome_types)            % subjective / objective
+    for col = 1:length(datasets)             % dataset 1..N
+        
+        ax = subplot(length(outcome_types), length(datasets), ...
+                     (row-1)*length(datasets) + col);
+        hold on;
+
+        % Pick correct outcome column
+        if strcmp(outcome_types{row}, 'Objective')
+            outcome_col = datasets{col}{1}.ObjectiveOutcome;
+        else
+            outcome_col = datasets{col}{1}.SubjectiveOutcome;
+        end
+
+        % Two lines: outcome = 0 and outcome = 1
+        for o = 0:1
+
+            % Trials matching outcome
+            trial_indices = (outcome_col == o);
+
+            % Extract α time series for those trials
+            time_series_cells = datasets{col}{1}.AlphaAmplitude(trial_indices);
+
+            % Extract the 3rd column (10 Hz band), row vector per trial
+            time_course_data = cellfun(@(x) x(:,3).', ...
+                time_series_cells, 'UniformOutput', false);
+
+            % Stack into matrix: nTrials × nTime
+            M = cell2mat(time_course_data);
+
+            % Average time course
+            avg_tc = mean(M, 1);
+
+            % Plot
+            plot(avg_tc, 'LineWidth', 1.8, 'DisplayName', sprintf('Outcome = %d', o));
+        end
+        
+        title(sprintf('%s – %s', outcome_types{row}, datasets{col}{2}));
+        xlabel('Time');
+        line([512, 512], [4 5], 'Color', 'k', 'LineStyle', ':', 'LineWidth', 1.5, 'DisplayName', 'Target');
+        ylabel('Alpha Amplitude (10 Hz)');
+        ylim([4 5])
+        legend('show', 'Location', 'Best' );
+        grid on;
+        hold off;
+    end
+end
+
+hold off;
 %% INTERACTION ANALYSIS
 
 % Here we will take one alpha predictor and not each time-frequency
 % combination, choice is informed visually by the heatmap results.
 
-time_pred_bin = [-0.200; -0.100];
+time_pred_bin = [-0.300; -0.200];
 freq_pred_bin = [10; 11];
 
 time_zero_sample = round(PRE_EVENT_SEC * Fs); 
@@ -183,6 +243,7 @@ for i = 1:height(MasterTable)
     MasterTable.AlphaAmplitudeAvg(i) = ...
     squeeze(mean(mean(MasterTable.AlphaAmplitude{i}(pred_start_sample:pred_end_sample, freq_start_sample:freq_end_sample), 1), 2));
 end
+
 
 %% DIFFERENT DATASETS    
 
@@ -202,6 +263,87 @@ MasterTable_Interval = MasterTable(condition_codes == 2, :);
 
 % 2. MasterTable_Irregular (Condition == 3: Keep Irregular)
 MasterTable_Irregular = MasterTable(condition_codes == 3, :);
+
+%%
+
+% Define the datasets and outcome types
+datasets = {{MasterTable_Rhythm, 'Rhythm'}, {MasterTable_Interval, 'Interval'}, {MasterTable_Irregular, 'Irregular'}};
+outcome_types = {'Subjective', 'Objective'};
+
+% Prepare data for bar plot
+subjective_betas = [];
+objective_betas = [];
+subjective_CI = [];
+objective_CI = [];
+
+labels = cell(1, length(datasets));
+
+for col = 1:length(datasets)
+    data_condition = datasets{col}{1};
+    labels{col} = datasets{col}{2};
+    
+    % Fit GLME for Subjective
+    model_formula_subjective = 'SubjectiveOutcome ~ AlphaAmplitudeAvg + (1|SubjectID)';
+    glme_subjective = fitglme(data_condition, model_formula_subjective, ...
+                               'Distribution', 'Binomial', ...
+                               'Link', 'logit', 'FitMethod', 'Laplace');
+    subjective_betas(col) = glme_subjective.Coefficients.Estimate(2);
+    all_CIs = coefCI(glme_subjective); 
+    subjective_CI(:, col) = all_CIs(2,:);
+    
+    % Fit GLME for Objective
+    model_formula_objective = 'ObjectiveOutcome ~ AlphaAmplitudeAvg + (1|SubjectID)';
+    glme_objective = fitglme(data_condition, model_formula_objective, ...
+                              'Distribution', 'Binomial', ...
+                              'Link', 'logit', 'FitMethod', 'Laplace');
+    objective_betas(col) = glme_objective.Coefficients.Estimate(2);
+    all_CIs = coefCI(glme_objective); 
+    objective_CI(:, col) = all_CIs(2,:);
+end
+
+% Create bar plot
+figure('Units', 'normalized', 'Position', [0.1 0.1 0.6 0.4]);
+bar_data = [subjective_betas; objective_betas]';
+bar_handle = bar(bar_data, 'grouped');
+hold on;
+
+% Set colors for bars
+bar_handle(1).FaceColor = [0.2 0.6 0.8]; % Subjective color
+bar_handle(2).FaceColor = [0.8 0.2 0.2]; % Objective color
+
+
+% --- Correct x-positions (this is the IMPORTANT part) ---
+x_subjective = bar_handle(1).XEndPoints;
+x_objective  = bar_handle(2).XEndPoints;
+
+% Use the extracted labels (Assuming 'labels' is defined correctly)
+set(gca, 'XTickLabel', labels, 'XTickLabelRotation', 45);
+ylabel('Coefficient Estimate');
+ylim([-0.06 0.06]);
+title('Coefficient Estimates and CIs for Subjective and Objective Outcomes');
+
+
+% Add legend before error bars so the bars are in the legend
+legend({'Subjective', 'Objective'}, 'Location', 'Best', 'TextColor', 'k', ...
+       'Color', 'w', 'EdgeColor', 'k', 'Box', 'on');
+
+% Add error bars for confidence intervals (Use the calculated x_subjective/x_objective)
+for col = 1:length(datasets)
+    % Subjective CI
+    errorbar(x_subjective(col), subjective_betas(col), ...
+             subjective_betas(col) - subjective_CI(1, col), ...
+             subjective_CI(2, col) - subjective_betas(col), ...
+             'k', 'linestyle', 'none', 'LineWidth', 1.5, 'HandleVisibility','off');
+    
+    % Objective CI
+    errorbar(x_objective(col), objective_betas(col), ...
+             objective_betas(col) - objective_CI(1, col), ...
+             objective_CI(2, col) - objective_betas(col), ...
+             'k', 'linestyle', 'none', 'LineWidth', 1.5, 'HandleVisibility','off');
+end
+
+grid on;
+
 
 %% A.1 LINEAR ALPHA SLOPE PER INTENSITY (NO INTERACTION TERM)
 
@@ -714,7 +856,7 @@ for d = 1:length(datasets)
         edges = quantile(a, [0 1/2 1]);
         DATA.alphaBin = discretize(a, edges);
 
-        DATA.StimZc = DATA.StimIntensityZ;
+        DATA.StimZc = DATA.StimIntensityZ; %TODO ADD Z
         
         % Define the grid for StimIntensityZ
         s_grid = linspace(min(DATA.StimIntensityZ), max(DATA.StimIntensityZ), 200)';
@@ -831,7 +973,7 @@ for d = 1:length(datasets)
             hold on;   % ← TURN ON BEFORE ANYTHING
 
             % Plot the slope and confidence intervals
-            fill([s_grid_plot; flipud(s_grid_plot)], [CI_lower; flipud(CI_upper)], colors(m,:), 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+            %fill([s_grid_plot; flipud(s_grid_plot)], [CI_lower; flipud(CI_upper)], colors(m,:), 'FaceAlpha', 0.3, 'EdgeColor', 'none');
             %hold on;
             plot(s_grid_plot, slope, 'LineWidth', 2, 'Color', colors(m,:), 'DisplayName', models{m});
             %hold off;
