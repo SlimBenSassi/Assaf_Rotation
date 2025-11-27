@@ -222,11 +222,9 @@ for row = 1:length(outcome_types)            % subjective / objective
             % Average time course
             avg_tc = mean(M, 1);
 
-    
             % Plot
             plot(avg_tc, 'LineWidth', 1.8, 'DisplayName', sprintf('Outcome = %d', o));
         end
-        
 
         title(sprintf('%s – %s', outcome_types{row}, datasets{col}{2}));
         xlabel('Time');
