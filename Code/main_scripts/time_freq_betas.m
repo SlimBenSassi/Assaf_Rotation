@@ -92,6 +92,23 @@ end
 toc
 disp('All single-trial Alpha features are now averaged over ROI channels.');
 
+
+tic
+if length(size(MasterTable.Baseline{1})) > 2
+    for i = 1:height(MasterTable)
+        MasterTable.Baseline{i} = squeeze(mean(MasterTable.Baseline{i}(:, :, currentROI), 3));
+    end
+end
+toc
+disp('All single-trial Baselines are now averaged over ROI channels.');
+
+%% THE TRUEST OF Z_SCORES
+
+MasterTable= baseline_and_subject_zscore(MasterTable, currentROI);
+
+%% just for convenience for now
+MasterTable.StimIntensityZ = MasterTable.StimIntensity;
+
 %% Z-SCORING (ASSUMES CHANNELS ALREADY AVERAGED)
 
 tic
@@ -205,15 +222,17 @@ for row = 1:length(outcome_types)            % subjective / objective
             % Average time course
             avg_tc = mean(M, 1);
 
+    
             % Plot
             plot(avg_tc, 'LineWidth', 1.8, 'DisplayName', sprintf('Outcome = %d', o));
         end
         
+
         title(sprintf('%s – %s', outcome_types{row}, datasets{col}{2}));
         xlabel('Time');
-        line([512, 512], [4 5], 'Color', 'k', 'LineStyle', ':', 'LineWidth', 1.5, 'DisplayName', 'Target');
+        line([512, 512], [-0.1 0.3], 'Color', 'k', 'LineStyle', ':', 'LineWidth', 1.5, 'DisplayName', 'Target');
         ylabel('Alpha Amplitude (10 Hz)');
-        ylim([4 5])
+        ylim([-0.1 0.3])
         legend('show', 'Location', 'Best' );
         grid on;
         hold off;
@@ -319,7 +338,7 @@ x_objective  = bar_handle(2).XEndPoints;
 % Use the extracted labels (Assuming 'labels' is defined correctly)
 set(gca, 'XTickLabel', labels, 'XTickLabelRotation', 45);
 ylabel('Coefficient Estimate');
-ylim([-0.06 0.06]);
+ylim([-0.1 0.1]);
 title('Coefficient Estimates and CIs for Subjective and Objective Outcomes');
 
 
@@ -852,9 +871,9 @@ for d = 1:length(datasets)
         DATA = datasets{d}{1};  % Assuming the datasets are in the workspace
         
         % Prepare the data for plotting
-        a = DATA.AlphaAmplitudeAvg;
-        edges = quantile(a, [0 1/2 1]);
-        DATA.alphaBin = discretize(a, edges);
+        %a = DATA.AlphaAmplitudeAvg;
+        %edges = quantile(a, [0 1/2 1]);
+        %DATA.alphaBin = discretize(a, edges);
 
         DATA.StimZc = DATA.StimIntensityZ; %TODO ADD Z
         
