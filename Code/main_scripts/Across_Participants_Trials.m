@@ -1,6 +1,6 @@
 %% 1. INITIALIZATION AND FILE SELECTION
 
-clear; close all; clc
+%clear; close all; clc
 disp('--- Starting Multi-Subject Data Aggregation for GLMM , TODO FIX LINE NUMBERS MAY NOT EXCEED ---');
 
 
@@ -30,13 +30,13 @@ disp(['Selected ' num2str(N_SUBJECTS) ' subject files. Proceeding to loop...']);
 
 %% --- Global Variables ---
 
-alpha_freq_range = [7, 13]; % Alpha band for filtering (Hz)
+alpha_freq_range = [13, 40]; % Alpha band for filtering (Hz)
 
 % --- Time Variables --- %
 Fs = 1024; %change if needed
 n_channels = 71; %change if needed
 pred_window_s = 0.200; % 200ms pre-stimulus prediction window (used for non-time resolved average across window)
-PRE_EVENT_SEC = 1.200; %taking all time since warning signal 
+PRE_EVENT_SEC = 0.5; %taking all time since warning signal 
 POST_EVENT_SEC = 0.1;
 total_epoch_samples = round((PRE_EVENT_SEC + POST_EVENT_SEC) * Fs);
 erp_time_vec = (0:total_epoch_samples - 1) / Fs - PRE_EVENT_SEC;
@@ -155,22 +155,22 @@ for sub_idx = 1:N_SUBJECTS
     % The final aggregated data must be N_Trials x 1 column vectors.
     %current_alpha_power = current_alpha_power(:);
     current_alpha_power = alpha_power_envelope;
-    current_objective_outcome = obj_outcomes(:);
-    current_subjective_outcome = subj_outcomes(:);
-    current_condition = conditions(:);
-    current_stim_intensity = intensities(:);
-    current_isi = isis(:);
+    %current_objective_outcome = obj_outcomes(:);
+    %current_subjective_outcome = subj_outcomes(:);
+    %current_condition = conditions(:);
+    %current_stim_intensity = intensities(:);
+    %current_isi = isis(:);
 
     n_trials = size(alpha_power_envelope, 4);
 
     for t = 1:n_trials
         all_alpha_power_raw = [all_alpha_power_raw; {alpha_power_envelope(:,:,:,t)}];
-        all_stim_intensity_raw = [all_stim_intensity_raw; current_stim_intensity(t)];
-        all_objective_outcome  = [all_objective_outcome;  current_objective_outcome(t)];
-        all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome(t)];
-        all_conditions         = [all_conditions;         current_condition(t)];
-        all_isis               = [all_isis; current_isi(t)];
-        all_subject_ids        = [all_subject_ids;        {subject_id_str}];
+       % all_stim_intensity_raw = [all_stim_intensity_raw; current_stim_intensity(t)];
+        %all_objective_outcome  = [all_objective_outcome;  current_objective_outcome(t)];
+        %all_subjective_outcome = [all_subjective_outcome; current_subjective_outcome(t)];
+        %all_conditions         = [all_conditions;         current_condition(t)];
+        %all_isis               = [all_isis; current_isi(t)];
+       % all_subject_ids        = [all_subject_ids;        {subject_id_str}];
     end
 
     % 5. STANDARDIZATION (Z-SCORING WITHIN SUBJECT) for alpha power
@@ -202,6 +202,55 @@ end
 
 toc
 
+
+%%
+num_rows = size(all_alpha_power_raw, 1);
+all_alpha_power_averaged = cell(num_rows, 1);
+for i = 1:num_rows
+    all_baseline_raw{i} = squeeze(mean(all_baseline_raw{i}(:, :, currentROI), 3));
+end
+
+%%
+num_rows = size(all_alpha_power_raw, 1);
+all_alpha_power_averaged = cell(num_rows, 1);
+for i = 1:num_rows
+    all_alpha_power_averaged{i} = squeeze(mean(all_alpha_power_raw{i}(:, :, currentROI), 3));
+end
+%%
+
+% Assuming:
+% 1. MasterTable is your main table.
+% 2. MasterTable.OriginalData is the column of 614x5 matrices (e.g., MasterTable.Baseline).
+% 3. pef is your new 429x1 cell array of 614x7 matrices (the result from the previous step).
+%MasterTable = MasterTable(MasterTable.SubjectID == categorical("102"), :);
+
+for i = 1:height(MasterTable)
+    % 1. Get the existing 614x5 data from the table
+    original_data = MasterTable_Mouihbi.AlphaAmplitude{i}; % 614x5
+    
+    % 2. Get the new 614x7 data from the 'pef' cell array
+    new_data = all_alpha_power_averaged{i}; % 614x7
+    
+    % 3. Horizontally concatenate the new data (614x7) and the original data (614x5)
+    %    The new data (1-7) comes first, followed by the original data (8-12)
+    %    This results in a 614x12 matrix (7 + 5 = 12)
+    MasterTable_Mouihbi.AlphaAmplitude{i} = [original_data, new_data];
+end
+
+%%
+
+for i = 1:height(MasterTable)
+    % 1. Get the existing 614x5 data from the table
+    original_data = MasterTable_Mouihbi.Baseline{i}; % 614x5
+    
+    % 2. Get the new 614x7 data from the 'pef' cell array
+    new_data = all_baseline_raw{i}; % 614x7
+    
+    % 3. Horizontally concatenate the new data (614x7) and the original data (614x5)
+    %    The new data (1-7) comes first, followed by the original data (8-12)
+    %    This results in a 614x12 matrix (7 + 5 = 12)
+    MasterTable_Mouihbi.Baseline{i} = [original_data, new_data];
+end
 %% 3. FINALIZATION AND INSPECTION (Creating the Master Table)
 
 
@@ -235,13 +284,13 @@ head(MasterTable)
 % then use fileparts() to step back to the repository's root directory.
 %script_path = fileparts(which(mfilename)); % Gets the directory of the current running script
 %repo_root = fileparts(fileparts(script_path)); % Assumes script is 2 levels down (main_scripts)
-
+%%
 % 2. Construct the full path to the 03_RESULTS folder
 RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); 
 
 % 3. Create the final filename
-final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table__not_all_cuz_outofmemory.mat');
+final_save_path = fullfile(RESULTS_DIR, 'GLMM_Master_Table_40FREQS_102.mat');
 
 % 4. Save the table
-save(final_save_path, 'MasterTable', '-v7.3');
+save(final_save_path, 'MasterTable_Mouihbi', '-v7.3');
 disp(['Master table saved to: ' final_save_path]);

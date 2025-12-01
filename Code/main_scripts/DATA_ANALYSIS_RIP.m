@@ -2,7 +2,7 @@
 
 %% 1. INITIALIZATION AND LOAD MASTER TABLE
 
-%clear; close all; clc
+clear; close all; clc
 disp('--- Piloting GLMM Prediction Model ---');
 
 %--- Configuration ---
@@ -24,9 +24,12 @@ master_table_file = fullfile(filepath, filename);
 tic
 
 % Load the MasterTable (contains SubjectID, AlphaPower, StimIntensity, SubjectiveOutcome)
+%load(master_table_file, 'MasterTable_Mouihbi');
 load(master_table_file, 'MasterTable');
 toc
 disp('Master Table loaded successfully.');
+
+%MasterTable = MasterTable_Mouihbi;
 
 % Ensure data types are correct for the GLMM function
 MasterTable.SubjectID = categorical(MasterTable.SubjectID);
@@ -47,10 +50,17 @@ DO_BASELINE_CORRECTION = true;
 Fs = 1024; % Assuming Fs is 1024 Hz
 n_channels = 71; %change if needed
 PRE_EVENT_SEC = 0.5; % Assumed pre-stimulus window
-N_TIME_BINS = 10;
-N_FREQ_BINS = 5; % Code not ready for other values yet
+PRE_SAMPLES = PRE_EVENT_SEC * Fs; % 500 samples
+dims = size(MasterTable.AlphaAmplitude{1});
+N_samples = dims(1);
+time_axis_ms = ((1:N_samples) - PRE_SAMPLES - 1) * (1000 / Fs);
+POST_EVENT_SEC = 0.1;
+time_samples = size(MasterTable.AlphaAmplitude{1});
+time_samples = time_samples(1);
+N_TIME_BINS = 20;
+N_FREQ_BINS = 5;
 alpha_freq_range = [8 12];
-time_window_sec = [-0.495 0];
+time_window_sec = [-0.495 0.005];
 
 
 
@@ -94,7 +104,7 @@ disp('All single-trial Baselines are now averaged over ROI channels.');
 
 %% BASELINE PER TRIAL AND Z-SCORE PER PARTICIPANT
 
-MasterTable= baseline_and_subject_zscore(MasterTable, currentROI);
+MasterTable= baseline_and_subject_zscore(MasterTable, currentROI, false);
 RAW=false;
 disp('All single-trial baseline-corrected and z-scored per participant.');
 
@@ -105,7 +115,7 @@ disp('All single-trial baseline-corrected and z-scored per participant.');
 % Here we will take one alpha predictor and not each time-frequency
 % combination, choice is informed visually by the heatmap results.
 
-time_pred_bin = [-0.300; -0.200];
+time_pred_bin = [-0.495; -0.050];
 freq_pred_bin = [8; 12];
 
 time_zero_sample = round(PRE_EVENT_SEC * Fs); 
@@ -147,6 +157,13 @@ MasterTable_Interval = MasterTable(condition_codes == 2, :);
 % 2. MasterTable_Irregular (Condition == 3: Keep Irregular)
 MasterTable_Irregular = MasterTable(condition_codes == 3, :);
 
+%%  Make Irregular comparable with others
+
+% Create a logical index that is TRUE for every row that meets BOTH criteria
+logical_index = (MasterTable_Irregular.IrregularTargetTime >= 2) & (MasterTable_Irregular.IrregularTargetTime <= 4);
+
+% Use the logical index to select the matching rows into a new table
+MasterTable_Irregular = MasterTable(logical_index, :);
 
 
 %% CONDITIONS AND OUTCOMES
@@ -159,6 +176,7 @@ datasets = {{MasterTable_Rhythm, 'Rhythm'}, {MasterTable_Interval, 'Interval'}, 
 
 %% TIME COURSES
 
+figure;
 for row = 1:length(outcome_types)            % subjective / objective
     for col = 1:length(datasets)             % dataset 1..N
         
@@ -183,7 +201,15 @@ for row = 1:length(outcome_types)            % subjective / objective
             time_series_cells = datasets{col}{1}.AlphaAmplitude(trial_indices);
 
             % Extract the 3rd column (10 Hz band), row vector per trial
-            time_course_data = cellfun(@(x) x(:,3).', ...
+            %time_course_data = cellfun(@(x) x(:,10).', ...
+                %time_series_cells, 'UniformOutput', false);
+
+                        % Define the start and end indices of the frequency band you want to average over
+            %start_index = 8;  % e.g., for 8 Hz
+            %end_index = 12;   % e.g., for 12 Hz
+            
+            % Average across the specified column range (start_index to end_index)
+            time_course_data = cellfun(@(x) mean(x(:, freq_start_sample:freq_end_sample), 2).', ...
                 time_series_cells, 'UniformOutput', false);
 
             % Stack into matrix: nTrials × nTime
@@ -193,12 +219,13 @@ for row = 1:length(outcome_types)            % subjective / objective
             avg_tc = mean(M, 1);
 
             % Plot
-            plot(avg_tc, 'LineWidth', 1.8, 'DisplayName', sprintf('Outcome = %d', o));
+            plot(time_axis_ms, avg_tc, 'LineWidth', 1.8, 'DisplayName', sprintf('Outcome = %d', o));
         end
         
         title(sprintf('%s – %s', outcome_types{row}, datasets{col}{2}));
         xlabel('Time');
         ylabel('Alpha Amplitude (10 Hz)');
+        xline(0, '--k', 'DisplayName', 'Target');
         legend('show');
         grid on;
         hold off;
@@ -220,21 +247,22 @@ for col = 1:length(datasets)
     labels{col} = datasets{col}{2};
     
     % Fit GLME for Subjective
-    model_formula_subjective = 'SubjectiveOutcome ~ AlphaAmplitudeAvg + (1|SubjectID)';
+    model_formula_subjective = ['SubjectiveOutcome ~ AlphaAmplitudeAvg + (1|SubjectID)'];
     glme_subjective = fitglme(data_condition, model_formula_subjective, ...
                                'Distribution', 'Binomial', ...
                                'Link', 'logit', 'FitMethod', 'Laplace');
     subjective_betas(col) = glme_subjective.Coefficients.Estimate(2);
-    all_CIs = coefCI(glme_subjective); 
+    all_CIs = coefCI(glme_subjective, 'Alpha', 0.1); 
     subjective_CI(:, col) = all_CIs(2,:);
     
     % Fit GLME for Objective
-    model_formula_objective = 'ObjectiveOutcome ~ AlphaAmplitudeAvg + (1|SubjectID)';
+    model_formula_objective = ['ObjectiveOutcome ~ AlphaAmplitudeAvg + (1|SubjectID)'];
+
     glme_objective = fitglme(data_condition, model_formula_objective, ...
                               'Distribution', 'Binomial', ...
                               'Link', 'logit', 'FitMethod', 'Laplace');
     objective_betas(col) = glme_objective.Coefficients.Estimate(2);
-    all_CIs = coefCI(glme_objective); 
+    all_CIs = coefCI(glme_objective, 'Alpha', 0.1); 
     objective_CI(:, col) = all_CIs(2,:);
 end
 
@@ -295,7 +323,7 @@ for row = 1:length(outcome_types)
                               N_TIME_BINS, N_FREQ_BINS, outcome_types{row}, false);
         % plot into the current axes
         imagesc(TimeBins, FreqBins, BetaMap'); %axis xy;
-        clim([-0.05, 0.05]); 
+        clim([-0.1, 0.1]); 
         colormap('jet'); % Use a high-contrast diverging colormap (jet or parula)
         hold on; 
         title(sprintf('%s - %s', outcome_types{row},datasets{col}{2}));
@@ -305,8 +333,8 @@ for row = 1:length(outcome_types)
         % --- 1. Create a logical mask for significance (p < 0.05) ---
         %significant_mask = (PValueMap' < 0.1); % 0.025 because our hypothesis is one-tailed 
         % If you already used transposed maps in plotting, keep same orientation:
-        %sig_neg_mask = (PValueMap' < 0.1) & (BetaMap' < 0);
-        sig_neg_mask = (PValueMap' < 0.05);
+        sig_neg_mask = (PValueMap' < 0.1) & (BetaMap' < 0);
+        %sig_neg_mask = (PValueMap' < 0.1);
         % 2. Plot the contour lines using the mask
         [~, h_contour] = contour(TimeBins, FreqBins, sig_neg_mask, [0.5 0.5], 'LineWidth', 3, 'LineColor', 'w', 'LineStyle', ':');
         colorbar;
@@ -586,3 +614,35 @@ for o = 1:length(outcome_types)
         grid on;
     end
 end 
+
+
+%%
+
+function sigMask = fdr_mask(pMap, q)
+    if nargin < 2
+        q = 0.05; 
+    end
+
+    % flatten
+    p = pMap(:);
+    m = numel(p);
+
+    % sort
+    [p_sorted, idx] = sort(p);
+
+    % BH criterion
+    thresh = (1:m)'/m * q;
+
+    % find largest k where p(k) <= thresh(k)
+    k = find(p_sorted <= thresh, 1, 'last');
+
+    sigMask = false(size(p));
+
+    if ~isempty(k)
+        sigMask(idx(1:k)) = true;
+    end
+
+    % reshape back
+    sigMask = reshape(sigMask, size(pMap));
+end
+

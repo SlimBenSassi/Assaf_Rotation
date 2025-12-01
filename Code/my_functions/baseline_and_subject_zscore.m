@@ -1,4 +1,4 @@
-function DATA = baseline_and_subject_zscore(DATA, roi_channels)
+function DATA = baseline_and_subject_zscore(DATA, roi_channels, DO_ZSCORE)
 % BASELINE_AND_SUBJECT_ZSCORE
 % Z-scores AlphaAmplitude relative to trial baseline, then within-subject
 %
@@ -41,23 +41,27 @@ for t = 1:n_trials
     alpha_bc{t} = (alpha_trial - mu_base) / sigma_base;
 end
 
-% Step 2: Subject-level z-score
-subjects = cellstr(unique(DATA.SubjectID));
+if DO_ZSCORE
 
-for s = 1:length(subjects)
-    subj = subjects{s};
-    idx_subj = DATA.SubjectID == subj;
+% Step 2: Subject-level z-score
+    subjects = cellstr(unique(DATA.SubjectID));
     
-    % Mean per trial across time x freq
-    trial_means = cellfun(@(x) mean(x(:)), alpha_bc(idx_subj));
-    
-    mu_subj = mean(trial_means);
-    sigma_subj = std(trial_means);
-    if sigma_subj == 0, sigma_subj = 1; end
-    
-    % Apply z-score to each trial
-    for t_idx = find(idx_subj)'
-        alpha_bc{t_idx} = (alpha_bc{t_idx} - mu_subj) / sigma_subj;
+    for s = 1:length(subjects)
+        subj = subjects{s};
+        idx_subj = DATA.SubjectID == subj;
+        
+        % Mean per trial across time x freq
+        trial_means = cellfun(@(x) mean(x(:)), alpha_bc(idx_subj));
+        
+        mu_subj = mean(trial_means);
+        sigma_subj = std(trial_means);
+        if sigma_subj == 0, sigma_subj = 1; end
+        sigma_subj = 1; % because maybe dividing by baseline sigma isn't meaningful
+        
+        % Apply z-score to each trial
+        for t_idx = find(idx_subj)'
+            alpha_bc{t_idx} = (alpha_bc{t_idx} - mu_subj) / sigma_subj;
+        end
     end
 end
 

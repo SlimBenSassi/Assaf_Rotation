@@ -40,7 +40,7 @@ load(master_table_file, 'MasterTable');        % loads all_alpha_power_raw, all_
 
 %% --- Global Variables ---
 
-alpha_freq_range = [8, 12]; % Alpha band for filtering (Hz)
+alpha_freq_range = [13, 40]; % Alpha band for filtering (Hz)
 
 % --- Time Variables --- %
 Fs = 1024; %change if needed
@@ -84,6 +84,8 @@ currentROI_name = current_ROI_cell{2};
 %% ===================================================
 %      Allocate NEW merged variables
 % ====================================================
+MasterTable = MasterTable(MasterTable.SubjectID == categorical("102"), :);
+
 all_subject_ids = MasterTable.SubjectID;
 all_baseline_raw              = cell(size(all_subject_ids));   % cell of baseline windows
 all_isi_from_baseline         = zeros(size(all_subject_ids));
@@ -100,7 +102,8 @@ subjects = cellstr(unique(all_subject_ids));
 
 disp(['Processing ' num2str(length(subjects)) ' subjects for baseline features...']);
 
-for s = 13:length(subjects)
+%for s = 13:length(subjects)
+for s = 1:1
     %subjects = categories(all_subject_ids);  % now a cell array of strings
     subj = subjects{s};
     disp(['Processing subject ' subj ' (' num2str(s) ' of ' num2str(length(subjects)) ')']);
