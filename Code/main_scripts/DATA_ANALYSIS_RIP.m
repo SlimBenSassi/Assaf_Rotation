@@ -536,6 +536,107 @@ for d = 1:length(datasets)
     end
 end
 
+%%
+
+% --- Settings ---
+[Xvar, Yvar] = deal("ObjectiveOutcome", "SubjectiveOutcome");
+
+datasets = {
+    {MasterTable_Rhythm,   'Rhythm'}, 
+    {MasterTable_Interval, 'Interval'}, 
+    {MasterTable_Irregular,'Irregular'}
+};
+
+stim_levels = 1:10;
+
+figure;
+set(gcf, 'Position', [100 100 1000 400]);
+
+for d = 1:length(datasets)
+
+    DATA = datasets{d}{1};
+    dataset_name = datasets{d}{2};
+
+    % --- Compute terciles of alpha ---
+    alpha = DATA.AlphaAmplitudeAvg(:);
+    edges = quantile(alpha, [0 1/3 2/3 1]);
+    DATA.alphaTercile = discretize(alpha, edges);
+
+    subjects = unique(DATA.SubjectID);
+
+    % Storage for GROUP regression
+    all_obj_low  = [];  % each row = a subject-level point
+    all_sub_low  = [];
+    all_obj_high = [];
+    all_sub_high = [];
+
+    subplot(1,3,d); hold on;
+
+    % =====================================================================
+    % LOOP SUBJECTS
+    % =====================================================================
+    for si = 1:numel(subjects)
+        subj = subjects(si);
+        Dsub = DATA(DATA.SubjectID == subj, :);
+        Dsub = Dsub(Dsub.StimIntensity <8, :);
+
+        % -------- LOW tercile --------
+        D_low = Dsub(Dsub.alphaTercile == 1, :);
+
+        for s = 1:numel(stim_levels)
+            sel = D_low(D_low.StimIntensity == stim_levels(s), :);
+            if height(sel) > 0
+                all_obj_low(end+1,1) = mean(double(sel.(Xvar)), 'omitnan');
+                all_sub_low(end+1,1) = mean(double(sel.(Yvar)), 'omitnan');
+            end
+        end
+
+        % -------- HIGH tercile --------
+        D_high = Dsub(Dsub.alphaTercile == 3, :);
+
+        for s = 1:numel(stim_levels)
+            sel = D_high(D_high.StimIntensity == stim_levels(s), :);
+            if height(sel) > 0
+                all_obj_high(end+1,1) = mean(double(sel.(Xvar)), 'omitnan');
+                all_sub_high(end+1,1) = mean(double(sel.(Yvar)), 'omitnan');
+            end
+        end
+    end
+
+    % =====================================================================
+    % SCATTER ALL SUBJECT-LEVEL POINTS
+    % =====================================================================
+    scatter(all_obj_low,  all_sub_low,  40, "blue", "filled", "MarkerFaceAlpha",0.6);
+    scatter(all_obj_high, all_sub_high, 40, "red",  "filled", "MarkerFaceAlpha",0.6);
+
+    % =====================================================================
+    % FIT GROUP LINES ACROSS SUBJECT-LEVEL POINTS
+    % =====================================================================
+    if numel(all_obj_low) > 2
+        p_low  = polyfit(all_obj_low,  all_sub_low, 1);
+        xf = linspace(0,1,100);
+        plot(xf, polyval(p_low, xf), "blue", "LineWidth", 2);
+    end
+
+    if numel(all_obj_high) > 2
+        p_high = polyfit(all_obj_high, all_sub_high, 1);
+        xf = linspace(0,1,100);
+        plot(xf, polyval(p_high, xf), "red", "LineWidth", 2);
+    end
+
+    % --- Formatting ---
+    title(dataset_name);
+    xlabel("Objective performance (per-subject mean)");
+    ylabel("Subjective performance (per-subject mean)");
+    xlim([0.5 1]); ylim([0 1]);
+    grid on;
+
+    if d == 1
+        legend("Low α (subj points)", "High α (subj points)", ...
+               "Low α fit", "High α fit", "Location","best");
+    end
+end
+
 
 
 
@@ -650,19 +751,60 @@ for o = 1:length(outcome_types)
         intensities = unique(DATA.StimIntensity);
         nInt = length(intensities);
 
-        % -------------------------
-        % 1. BIN ALPHA INTO LOW/HIGH
-        % -------------------------
-        a = DATA.AlphaAmplitudeAvg;
-        edges = quantile(a, [0 .33 .67 1]);   % quartiles
+        % ----------------------------------------------------
+        % 1. BIN ALPHA INTO LOW/HIGH (PER-PARTICIPANT TERCILES)
+        % ----------------------------------------------------
         
-        lowMask  = a <= edges(2);
-        highMask = a >= edges(3);
+        % Initialize the bin column: 0 means middle tercile (to be removed)
+        DATA.alphaBin = zeros(height(DATA), 1);
         
-        DATA.alphaBin = zeros(size(a));
-        DATA.alphaBin(lowMask)  = 1;
-        DATA.alphaBin(highMask) = 2;
-
+        % Get unique Subject IDs
+        subjectIDs = unique(DATA.SubjectID);
+        
+         % Loop through each participant to calculate individual tercile edges
+        for subj = 1:length(subjectIDs)
+            currentID = subjectIDs(subj);
+            
+            % Create a mask for the current participant's data
+            subjMask = (DATA.SubjectID == currentID);
+            
+            % Extract the alpha values for this subject
+            alpha_subj = DATA.AlphaAmplitudeAvg(subjMask);
+            
+            % Ensure there is enough data to calculate terciles
+            if length(alpha_subj) < 3
+                % Skip subject if there are too few data points
+                continue;
+            end
+            
+            % Calculate individual tercile edges (33rd and 67th percentiles)
+            % [0 .33 .67 1] are the quantiles.
+            edges_subj = quantile(alpha_subj, [0 .33 .67 1]);
+            
+            % --- REVISED BIN ASSIGNMENT ---
+            % We will use the 'find' function on the subjMask to get the original row
+            % indices, and then use the *subject-specific* logical mask (lowMaskSubj)
+            % to sub-index those original row numbers.
+            
+            % Get the list of row indices for the current subject
+            original_rows = find(subjMask);
+            
+            % Identify rows within this subject's data that fall into the bins
+            lowMaskSubj  = alpha_subj <= edges_subj(2);
+            highMaskSubj = alpha_subj >= edges_subj(3);
+            
+            % Assign bin values back to the main DATA table using the revised indexing
+            
+            % Bin 1: Low Alpha (below 33rd percentile for this participant)
+            % Use the original row indices, filtered by the low alpha mask
+            lowAlphaRows = original_rows(lowMaskSubj);
+            DATA.alphaBin(lowAlphaRows) = 1;
+            
+            % Bin 2: High Alpha (above 67th percentile for this participant)
+            % Use the original row indices, filtered by the high alpha mask
+            highAlphaRows = original_rows(highMaskSubj);
+            DATA.alphaBin(highAlphaRows) = 2;
+        end
         % Remove alphaBin == 0 (middle quartiles)
         validMask = DATA.alphaBin ~= 0;
         
@@ -695,9 +837,9 @@ for o = 1:length(outcome_types)
                 nTotal_all(b,ii) = sum(useMask);
                 
                 if o == 1
-                    nSeen_all(b,ii) = sum(DATA.SubjectiveOutcome(useMask) == 1);
-                else
                     nSeen_all(b,ii) = sum(DATA.ObjectiveOutcome(useMask) == 1);
+                else
+                    nSeen_all(b,ii) = sum(DATA.SubjectiveOutcome(useMask) == 1);
                 end
             end
             
@@ -726,11 +868,11 @@ for o = 1:length(outcome_types)
             % -------------------------
             % 5. CONFIDENCE INTERVALS
             % -------------------------
-            params_lo = result.conf_Intervals(:,1,1);
-            params_hi = result.conf_Intervals(:,2,1);
+            %params_lo = result.conf_Intervals(:,1,1);
+            %params_hi = result.conf_Intervals(:,2,1);
             
-            y_lo = result.psiHandle([x_fit(:), repmat(params_lo', length(x_fit), 1)]);
-            y_hi = result.psiHandle([x_fit(:), repmat(params_hi', length(x_fit), 1)]);
+            %y_lo = result.psiHandle([x_fit(:), repmat(params_lo', length(x_fit), 1)]);
+            %y_hi = result.psiHandle([x_fit(:), repmat(params_hi', length(x_fit), 1)]);
             
             % (Optional) Fill CI shading
             fill([x_fit fliplr(x_fit)], ...
@@ -751,9 +893,9 @@ for o = 1:length(outcome_types)
         xlabel('Stimulus intensity');
 
         if o == 1
-            ylabel('P(seen)');
-        else
             ylabel('P(correct)');
+        else
+            ylabel('P(seen)');
         end
 
         title(sprintf('%s — %s', datasets{d}{2}, outcome_types{o}));
@@ -808,9 +950,8 @@ PRE_EVENT_SEC = 0.500;                     % alignment (target at PRE_EVENT_SEC)
 time_window_sec = [-0.495, 0.005];               % window to analyze (sec relative to target)
 freq_range_hz = [8 12];                    % alpha band to collapse
 N_TIME_BINS = 20;                          % number of time bins across window
-outcome = 'Subjective';                    % 'Subjective' or 'Objective'
-criterion = 0.01;  %because directional                         % cluster forming p-value (inside function)
-nPerms = 2000;    % permutations for cluster test (adjust)
+criterion = 0.1;  %because directional                         % cluster forming p-value (inside function)
+nPerms = 10000;    % permutations for cluster test (adjust)
 
 
 
@@ -937,6 +1078,8 @@ for r = 1:length(datasets)        % loop over datasets → rows
                 yv = y_vec(valid);
                 yv = yv(:);    % ensure column
                 
+                
+                
                 % Skip if not enough variability
                 if numel(unique(yv)) < 2 || numel(yv) < 6
                     betaMat(si,tb) = NaN;
@@ -993,6 +1136,208 @@ for r = 1:length(datasets)        % loop over datasets → rows
                 nSamp = clustersTrue(c,2);
                 pCl = clustersTrue(c,4);
      
+                if pCl < 0.1
+                    xs = time_bin_centers(startIdx:startIdx+nSamp-1);
+                    plot(xs, meanBeta(startIdx:startIdx+nSamp-1), 'r', 'LineWidth', 10); % highlight
+                     y_text = max(meanBeta(startIdx:startIdx+nSamp-1)) + 0.02; % adjust vertical position
+                    text(mean(xs), y_text, sprintf('p=%.3f', pCl), ...
+                 'HorizontalAlignment','center', 'VerticalAlignment','bottom', 'FontSize',10, 'Color','k');
+                end
+            end
+        end
+        plot(time_bin_centers, meanBeta, '-k','LineWidth',1.8); % redraw line on top
+       
+        grid on;
+    end
+end
+
+
+
+%% 0) SETTINGS (edit as needed)
+Fs = 1024;                                 % sampling rate
+PRE_EVENT_SEC = 0.500;                     % alignment (target at PRE_EVENT_SEC)
+time_window_sec = [-0.495, 0.005];               % window to analyze (sec relative to target)
+freq_range_hz = [8 12];                    % alpha band to collapse
+N_TIME_BINS = 20;                          % number of time bins across window
+outcome = 'Subjective';                    % 'Subjective' or 'Objective'
+criterion = 0.05;  %because directional                         % cluster forming p-value (inside function)
+nPerms = 10000;    % permutations for cluster test (adjust)
+
+
+
+figure('Units','normalized','Position',[0.05 0.05 0.9 0.8]); % adjust figure size
+
+for r = 1:length(datasets)        % loop over datasets → rows
+    T = datasets{r}{1};
+    subjects = cellstr(unique(T.SubjectID));
+    for c = 1:length(outcome_types)  % loop over outcomes → columns
+        outcome = outcome_types{c};
+        
+        ax = subplot(length(datasets), length(outcome_types), (r-1)*length(outcome_types) + c);
+        hold(ax,'on');
+
+        % 1) Unpack data & basic indices  
+        % Ensure SubjectID is categorical or string
+       % if ~iscategorical(T.SubjectID)
+        %    T.SubjectID = categorical(T.SubjectID);
+        %end
+        %subjects = categories(T.SubjectID);
+        nSubj = numel(subjects);
+        nTrialsTotal = height(T);
+        
+        % Unpack AlphaAmplitude cell to a 3D array [time x freqs x trials]
+        alpha_data_cube = cat(3, T.AlphaAmplitude{:});  % time x freqs x trials
+        [totalSamples, nFreqs, ~] = size(alpha_data_cube);
+        
+        % Map freq_range_hz to frequency indices (assumes all_freqs are integers starting freq_range_hz(1):freq_range_hz(2))
+        all_freqs = freq_range_hz(1):freq_range_hz(2);
+        % If your alpha_data_cube second dim corresponds to frequencies in `all_freqs`, use:
+        freq_idx = 1:nFreqs; % if second dim already matches the small range
+        % If you have a full freq vector, replace above with proper mapping.
+        
+        % 2) Time bin indices
+        time_zero_sample = round(PRE_EVENT_SEC * Fs);
+        start_sample = time_zero_sample + round(time_window_sec(1) * Fs);
+        end_sample   = time_zero_sample + round(time_window_sec(2) * Fs);
+        total_window_samples = end_sample - start_sample + 1;
+        samples_per_time_bin = floor(total_window_samples / N_TIME_BINS);
+        
+        % Precompute time bin centers in ms
+        time_bin_centers = zeros(N_TIME_BINS,1);
+        for tb = 1:N_TIME_BINS
+            s = start_sample + (tb-1)*samples_per_time_bin;
+            e = s + samples_per_time_bin - 1;
+            time_bin_centers(tb) = ((s+e)/2 - time_zero_sample) * 1000 / Fs; % ms relative to target
+        end
+        
+        % 3) Build per-subject beta matrix (subjects x timeBins)
+        betaMat = nan(nSubj, N_TIME_BINS);
+        warning('off','all'); % suppress warnings inside loop; remove if you want them
+
+
+        for si = 1:nSubj
+            subjLabel = subjects{si};             % categorical ID as char
+            subj_idx = (T.SubjectID == subjLabel);       % logical indexing
+            Tsub = T(subj_idx, :);
+            subjTrials = find(subj_idx); % indices into alpha_data_cube third dim
+
+            %fprintf('Subject %d: %d trials\n', subjLabel, sum(subj_idx));
+
+            % require at least some trials
+            if numel(subjTrials) < 1
+                % too few trials to fit reliable logistic; leave NaNs
+                continue;
+            end
+        
+            % construct subject-level predictors/outcome per trial for speed
+            % pre-extract outcome and stim for this subject
+            if strcmpi(outcome, 'Subjective')
+                y_vec = double(Tsub.SubjectiveOutcome);
+            else
+                y_vec = double(Tsub.ObjectiveOutcome);
+            end
+            stim_vec = double(Tsub.StimIntensity); % you can zscore within subject if needed
+        
+            % For each time bin compute alpha predictor per trial and fit glm (logistic)
+            for tb = 1:N_TIME_BINS
+                s = start_sample + (tb-1)*samples_per_time_bin;
+                e = s + samples_per_time_bin - 1;
+                % extract [time x freq x nTrials_subj] then average time & freq -> vector length nTrials_subj
+                % NOTE: alpha_data_cube indexes by global trial order; use subjTrials to select
+                sub_cube = alpha_data_cube(s:e, freq_idx, subjTrials);   % small 3D block
+                % average across time and freq -> 1 x 1 x nTrials_subj
+                alpha_trial_vals = squeeze(mean(mean(sub_cube,1,'omitnan'),2,'omitnan'))'; % column vector nTrials_subj x 1
+        
+                % check numeric shape
+                if isempty(alpha_trial_vals) || numel(alpha_trial_vals) ~= numel(y_vec)
+                    betaMat(si,tb) = NaN;
+                    continue;
+                end
+        
+                % Optional: center/scale stimulus within subject (helps fit stability)
+                stimZ = (stim_vec - mean(stim_vec, 'omitnan'));
+                %./ std(stim_vec, 'omitnan');
+                stimZ(isnan(stimZ)) = 0;
+        
+                % --- Build design matrix ---
+                X = [ ...
+                    alpha_trial_vals(:), ...             % main effect of alpha
+                    stimZ(:), ...                        % main effect of stimulus
+                    alpha_trial_vals(:) .* stimZ(:) ...  % interaction term
+                ];
+                
+                valid = ~any(isnan(X),2) & ~isnan(y_vec);
+                
+                Xv = X(valid,:);
+                yv = y_vec(valid);
+                
+                % Skip if no trials or no variation
+                if numel(unique(yv)) < 2 || size(Xv,1) < 6
+                    betaAlpha(si,tb) = NaN;
+                    betaStim(si,tb)  = NaN;
+                    betaInteract(si,tb) = NaN;
+                    continue
+                end
+                
+                % --- Fit GLM ---
+                try
+                    B = glmfit(Xv, yv, 'binomial', 'link', 'logit');  
+                    % B = [intercept; beta_alpha; beta_stim; beta_interaction]
+                
+                    betaAlpha(si,tb)    = B(2);
+                    betaStim(si,tb)     = B(3);
+                    betaInteract(si,tb) = B(4);
+                
+                catch
+                    betaAlpha(si,tb) = NaN;
+                    betaStim(si,tb)  = NaN;
+                    betaInteract(si,tb) = NaN;
+                end
+            end
+        end
+        warning('on','all');
+        
+        % 4) Quick sanity: remove subjects with all-NaN
+        betaMat = betaInteract;
+        valid_subj = any(~isnan(betaMat),2);
+        tempbm = betaMat;
+        betaMat = betaMat(valid_subj, :);
+        subjects_valid = subjects(valid_subj);
+        nSubj_valid = size(betaMat,1);
+        if nSubj_valid < 3
+            warning('Only %d valid subjects with beta time-series - cluster test may be unreliable.', nSubj_valid);
+        end
+        
+        % 5) Run cluster-based permutation test (your lab function)
+        data1 = betaMat;          % subjects x time
+        data2 = zeros(size(data1)); % null (compare to zero)
+        testType = 1; % within-subject
+        [clustersTrue, trueT_P, maxSumPermDistribution] = clusterBasedPermTest(data1, data2, testType, criterion, nPerms);
+        
+        % clustersTrue: rows = clusters, cols = [startIdx, nSamples, tSum, pVal]
+        disp('Clusters (startIdx, length, tSum, pVal):');
+        disp(clustersTrue);
+        
+        % 6) Plot mean beta timecourse with cluster overlays
+        meanBeta = nanmean(betaMat,1);
+        seBeta = nanstd(betaMat,[],1) ./ sqrt(size(betaMat,1));
+        
+        %figure('Units','normalized','Position',[0.1 0.2 0.7 0.4]);
+        plot(time_bin_centers, meanBeta, '-k','LineWidth',1.8); hold on;
+        fill([time_bin_centers; flipud(time_bin_centers)], [meanBeta'+1.96*seBeta'; flipud(meanBeta'-1.96*seBeta')], ...
+             [0.9 0.9 0.9], 'EdgeColor','none','FaceAlpha',0.6);
+        xlabel('Time relative to target (ms)');
+        ylabel('Interaction Effect');
+        ylim([-0.04 0.08])
+        title(sprintf('%s - %s: Interaction effect between Stimulus Intensity and Alpha', datasets{r}{2}, outcome));    
+        xlim([time_bin_centers(1) time_bin_centers(end)]);
+        
+        if ~isempty(clustersTrue)
+            for c = 1:size(clustersTrue,1)
+                startIdx = clustersTrue(c,1);
+                nSamp = clustersTrue(c,2);
+                pCl = clustersTrue(c,4);
+     
                 if pCl < 0.05
                     xs = time_bin_centers(startIdx:startIdx+nSamp-1);
                     plot(xs, meanBeta(startIdx:startIdx+nSamp-1), 'r', 'LineWidth', 10); % highlight
@@ -1007,3 +1352,243 @@ for r = 1:length(datasets)        % loop over datasets → rows
         grid on;
     end
 end
+
+
+
+%%
+% === Settings ===
+stimLevels = 1:10;
+Xvar = "ObjectiveOutcome";   % performance, used for PF
+DATA.master = MasterTable_Rhythm; % example dataset
+dataset_name = 'Rhythm';
+
+% --- Compute alpha terciles ---
+alpha = DATA.master.AlphaAmplitudeAvg(:);
+edges = quantile(alpha,[0 1/3 2/3 1]);
+DATA.master.alphaTerc = discretize(alpha,edges);
+
+subjects = unique(DATA.master.SubjectID);
+
+% Storage
+results = struct();
+res_idx = 1;
+
+for s = 1:numel(subjects)
+    SID = subjects(s);
+
+    % extract data of this subject
+    Dsub = DATA.master(DATA.master.SubjectID == SID, :);
+
+    for terc = 1:3
+        Dst = Dsub(Dsub.alphaTerc == terc, :);
+        if height(Dst) < 30
+            continue; % skip too small subsets
+        end
+
+        % Build psignifit data structure
+        data_ps = [];
+        for lv = stimLevels
+            trials = Dst(Dst.StimIntensity == lv, :);
+            if isempty(trials); continue; end
+            nCorrect = sum(trials.(Xvar)==1);
+            nTotal   = height(trials);
+            data_ps(end+1,:) = [lv, nCorrect, nTotal]; %#ok<AGROW>
+        end
+
+        if size(data_ps,1) < 4
+            continue; % too few levels
+        end
+
+        % === Fit psychometric ===
+        options = struct;
+        %options.expType = 'yesno';
+        options.sigmoidName = 'logistic';
+        options.threshPC = 0.5;
+        options.estimateType = 'MAP';
+
+        fit = psignifit(data_ps, options);
+        argus = fit.Fit;
+
+
+        % --- Extract thresholds & slopes ---
+        threshold = argus(1);
+        slope = fit.slope;
+
+        % Store results
+        results(res_idx).subject = SID;
+        results(res_idx).tercile = terc;
+        results(res_idx).threshold = threshold;
+        results(res_idx).slope = slope;
+        res_idx = res_idx + 1;
+    end
+end
+
+%%
+
+figure; hold on;
+
+colors = [0 0 1; 1 0 0; 0 0.6 0]; % blue low, red high, green mid
+
+for terc = 1:3
+    idx = [results.tercile] == terc;
+    thr = [results(idx).threshold];
+    slp = [results(idx).slope];
+
+    scatter(thr, slp, 60, colors(terc,:), 'filled');
+
+    % regression line
+    p = polyfit(thr, slp, 1);
+    xf = linspace(min(thr), max(thr), 200);
+    plot(xf, polyval(p, xf), 'Color', colors(terc,:), 'LineWidth', 2);
+end
+
+xlabel("Threshold");
+ylabel("Slope");
+title("Psychometric parameters per subject");
+legend("Low α","Mid α","High α");
+grid on;
+
+
+%%
+% ---------------------------
+% SETTINGS
+% ---------------------------
+Xvar = "ObjectiveOutcome";   % use "SubjectiveOutcome" for subjective
+stim_levels = 1:10;
+x_fit = linspace(min(stim_levels), max(stim_levels), 200)';
+options = struct;
+options.sigmoidName = 'logistic';
+%options.expType = 'Yesno';
+
+% choose dataset
+DATA = MasterTable_Rhythm;   % example
+alpha = DATA.AlphaAmplitudeAvg(:);
+edges = quantile(alpha, [0 1/3 2/3 1]);
+DATA.alphaTerc = discretize(alpha, edges);
+
+subjects = categories(DATA.SubjectID);   % categorical subjects
+
+% containers for group average
+group_pred_low  = zeros(numel(subjects), numel(x_fit));
+group_pred_high = zeros(numel(subjects), numel(x_fit));
+n_subj_low = 0; n_subj_high = 0;
+
+figure; hold on;
+colors = lines(2); % low=blue, high=red
+
+for si = 1:numel(subjects)
+    subj = subjects{si};
+    subjCat = categorical(cellstr(subj));
+    Dsub = DATA(DATA.SubjectID == subjCat, :);
+    if isempty(Dsub), continue; end
+
+    % compute subject-level empirical points for low & high tercile
+    for terc = [1 3]    % 1 = low, 3 = high
+        Dterc = Dsub(Dsub.alphaTerc == terc, :);
+        if height(Dterc) < 6
+            continue; % skip if too few trials
+        end
+
+        % build psignifit data: rows [intensity, nCorrect, nTotal]
+        data_ps = [];
+        subj_points_x = [];
+        subj_points_y = [];
+        for lv = stim_levels
+            sel = Dterc(Dterc.StimIntensity == lv, :);
+            if isempty(sel), continue; end
+            nTot = height(sel);
+            nCorr = sum(double(sel.(Xvar)) == 1);
+            data_ps(end+1,:) = [lv, nCorr, nTot]; %#ok<AGROW>
+
+            % store per-subject empirical point (for scatter)
+            subj_points_x(end+1,1) = lv; %#ok<AGROW>
+            subj_points_y(end+1,1) = nCorr / nTot; %#ok<AGROW>
+        end
+
+        if size(data_ps,1) < 4
+            continue; % not enough intensity levels
+        end
+
+        % Fit psignifit for this subject-tercile
+        result = psignifit(data_ps, options);
+
+                % ensure x_fit is a column
+        x_fit = x_fit(:);
+        
+        % params from psignifit
+        params = result.Fit(:);
+        
+        % initialize
+        y_fit_sub = nan(length(x_fit),1);
+        
+        % --- TRY MODERN CALL STYLE: psiHandle(x, params) ---
+        did = false;
+        try
+            tmp = result.psiHandle(x_fit, params);
+            if ismatrix(tmp) && size(tmp,1) == numel(x_fit)
+                y_fit_sub = tmp(:,1);  % first column = predicted probability
+                did = true;
+            end
+        catch
+            % ignore and try fallback
+        end
+        
+        % --- FALLBACK FOR OLD PSIGNIFIT VERSIONS ---
+        if ~did
+            try
+                tmp = result.psiHandle([x_fit, repmat(params', numel(x_fit), 1)]);
+                
+                if size(tmp,1) == numel(x_fit)
+                    y_fit_sub = tmp(:,1);
+                
+                elseif size(tmp,2) == numel(x_fit)
+                    tmp2 = tmp';
+                    y_fit_sub = tmp2(:,1);
+                
+                else
+                    % last resort: take first N entries of flattened vector
+                    tmpv = tmp(:);
+                    y_fit_sub = tmpv(1:numel(x_fit));
+                end
+        
+            catch ME
+                rethrow(ME); % show real error if BOTH calling styles fail
+            end
+        end
+        
+        % ensure column vector shape
+        y_fit_sub = y_fit_sub(:);
+
+        % Plot subject empirical points and faint subject fit
+        if terc == 1
+            n_subj_low = n_subj_low + 1;
+            group_pred_low(n_subj_low, :) = y_fit_sub(:)';
+            scatter(subj_points_x, subj_points_y, 28, 'MarkerFaceColor', colors(1,:), ...
+                    'MarkerEdgeColor','k', 'MarkerFaceAlpha', 0.6);
+            plot(x_fit, y_fit_sub(:,1), '-', 'Color', [colors(1,:) 0.15], 'LineWidth', 1); % faint
+            % optionally fill CI:
+            % fill([x_fit; flipud(x_fit)], [y_lo(:,1); flipud(y_hi(:,1))], colors(1,:), 'FaceAlpha', 0.05, 'EdgeColor','none');
+        else
+            n_subj_high = n_subj_high + 1;
+            group_pred_high(n_subj_high, :) = y_fit_sub(:)';
+            %scatter(subj_points_x, subj_points_y, 28, 'MarkerFaceColor', colors(2,:), ...
+             %       'MarkerEdgeColor','k', 'MarkerFaceAlpha', 0.6);
+            plot(x_fit, y_fit_sub(:,1), '-', 'Color', [colors(2,:) 0.15], 'LineWidth', 1); % faint
+        end
+    end
+end
+
+% Trim unused rows and compute group mean predicted curve
+group_pred_low = group_pred_low(1:n_subj_low, :);
+group_pred_high = group_pred_high(1:n_subj_high, :);
+
+mean_pred_low = mean(group_pred_low, 1, 'omitnan');
+mean_pred_high = mean(group_pred_high, 1, 'omitnan');
+
+% Plot bold group-mean fits
+plot(x_fit, mean_pred_low, '-', 'Color', colors(1,:), 'LineWidth', 3, 'DisplayName','Low α (group)');
+plot(x_fit, mean_pred_high, '-', 'Color', colors(2,:), 'LineWidth', 3, 'DisplayName','High α (group)');
+
+xlabel('Stimulus intensity'); ylabel('P(correct / seen)');
+legend('Location','best');
+grid on;
