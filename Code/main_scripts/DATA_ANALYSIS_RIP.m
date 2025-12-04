@@ -63,8 +63,6 @@ alpha_freq_range = [8 12];
 time_window_sec = [-0.495 0.005];
 
 
-
-
 % --- Channels --- %
 single_channel_idx = 48; % Cz=48, Oz=29
 ROI.Central = {[11, 12, 13, 46, 47, 48 ,49], "Central Cluster"};
@@ -75,6 +73,7 @@ current_ROI_cell = ROI.Occipital;
 currentROI = current_ROI_cell{1};
 currentROI_name = current_ROI_cell{2};
 
+% Raw or baseline-corrected, starts true
 RAW=true;
 
 %% AVERAGE DATA OF ROI (only run this if data file loaded isn't already ROI-averaged)
@@ -1592,3 +1591,104 @@ plot(x_fit, mean_pred_high, '-', 'Color', colors(2,:), 'LineWidth', 3, 'DisplayN
 xlabel('Stimulus intensity'); ylabel('P(correct / seen)');
 legend('Location','best');
 grid on;
+
+%%
+
+
+% === Define number of bins ===
+N_BINS = 10;
+
+% your existing info
+time_zero_sample = round(PRE_EVENT_SEC * Fs);
+T = size(MasterTable.AlphaAmplitude{1},1);   % #time samples in TF matrix
+time_vector = ((1:T) - time_zero_sample) / Fs;   % create the time axis in seconds
+
+% compute bin edges on your chosen time range:
+TIME_RANGE = [-0.495 0];   % adjust if needed
+edges = linspace(TIME_RANGE(1), TIME_RANGE(2), N_BINS+1);
+
+% Pre-allocate
+chi2_vals = zeros(N_BINS,1);
+p_vals = zeros(N_BINS,1);
+deltaAIC = zeros(N_BINS,1);
+
+
+for bi = 1:N_BINS
+    
+    % current time bin boundaries:
+    t_start = edges(bi);
+    t_end   = edges(bi+1);
+
+    % convert boundaries to sample indices
+    pred_start_sample = time_zero_sample + round(t_start * Fs);
+    pred_end_sample   = time_zero_sample + round(t_end   * Fs);
+
+    % RESTRICT TO ALPHA FREQUENCIES (same as your code)
+    all_freqs = alpha_freq_range(1):alpha_freq_range(2);
+    freq_start_sample = find(all_freqs == freq_pred_bin(1));
+    freq_end_sample   = find(all_freqs == freq_pred_bin(2));
+
+    % --- COMPUTE ALPHA AVERAGE FOR THIS BIN ---
+    AlphaBin = zeros(height(MasterTable),1);
+
+    for i = 1:height(MasterTable)
+        TF = MasterTable.AlphaAmplitude{i};
+
+        % safety clipping
+        s1 = max(1, pred_start_sample);
+        s2 = min(size(TF,1), pred_end_sample);
+
+        f1 = freq_start_sample;
+        f2 = freq_end_sample;
+
+        AlphaBin(i) = mean(mean(TF(s1:s2, f1:f2),1),2);
+    end
+
+    % attach temporary column for this bin
+    MasterTable.AlphaTemp = AlphaBin;
+
+    % ===========================
+    %        FIT MODELS
+    % ===========================
+
+    % --- MODEL 0: NO INTERACTION ---
+    M0 = fitglme(MasterTable, ...
+        'ObjectiveOutcome ~ StimIntensity + AlphaTemp + (1|SubjectID)', ...
+        'Distribution','Binomial','Link','logit', 'FitMethod', 'Laplace');
+
+    % --- MODEL 1: LINEAR INTERACTION ---
+    M1 = fitglme(MasterTable, ...
+        'ObjectiveOutcome ~ StimIntensity * AlphaTemp + (1|SubjectID)', ...
+        'Distribution','Binomial','Link','logit', 'FitMethod', 'Laplace');
+
+    % ===========================
+    %         LRT TEST
+    % ===========================
+    stats = compare(M0, M1);
+
+    chi2_vals(bi) = stats.LRStat(2);       % log-likelihood χ²
+    p_vals(bi)    = stats.pValue(2);       % p-value
+    deltaAIC(bi)  = stats.AIC(2) - stats.AIC(1);   % AIC drop (neg = improvement)
+end
+
+% cleanup
+MasterTable.AlphaTemp = [];
+
+
+figure;
+yyaxis left
+bar(chi2_vals,'FaceColor',[0.2 0.4 0.8], 'EdgeColor','none');
+ylabel('\chi^2 improvement (M1 vs M0)');
+xlabel('Time bins');
+
+yyaxis right
+plot(1:N_BINS, p_vals,'ko','MarkerFaceColor','k');
+ylabel('p-value');
+
+title('Stim × Alpha interaction strength over time');
+grid on;
+
+% Optional significance line
+hold on;
+yline(0.05,'r--','p=0.05');
+
