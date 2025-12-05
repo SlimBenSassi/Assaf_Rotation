@@ -30,7 +30,7 @@ disp(['Selected ' num2str(N_SUBJECTS) ' subject files. Proceeding to loop...']);
 
 %% --- Global Variables ---
 
-alpha_freq_range = [13, 40]; % Alpha band for filtering (Hz)
+alpha_freq_range = [13, 14]; % Alpha band for filtering (Hz)
 
 % --- Time Variables --- %
 Fs = 1024; %change if needed
@@ -201,6 +201,59 @@ for sub_idx = 1:N_SUBJECTS
 end
 
 toc
+
+
+%% save the new column in a file for safety
+
+column_names = {'AlphaAmplitude'};
+
+AlphaTable = table(all_alpha_power_raw);
+
+RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); % TODO change path
+
+final_save_path = fullfile(RESULTS_DIR, 'AlphaTable.mat');
+
+save(final_save_path, 'AlphaTable', '-v7.3');
+disp(['table saved to: ' final_save_path]);
+
+%% load master table
+
+DEFAULT_PATH = 'C:\Users\ssassi\Desktop\Assaf_Rotation\Data'; % TODO change path
+
+% --- 1. Use UIGETFILE for Interactive Selection (GUI Dialog) ---
+[filename, filepath] = uigetfile({'*.mat','MATLAB Data File (*.mat)' ;'*.*', 'All files (*.*)'},...
+                                    'Select Clean Preprocessed SDATA File', DEFAULT_PATH);
+
+if isequal(filename, 0)
+    disp('No file selected. Aborting script.');
+    return; 
+end
+
+master_table_file = fullfile(filepath, filename);
+
+%% update master table
+
+load(master_table_file, 'MasterTable');
+
+num_rows = size(all_alpha_power_raw, 1);
+all_alpha_power_averaged = cell(num_rows, 1);
+for i = 1:num_rows
+    all_alpha_power_averaged{i} = squeeze(mean(all_alpha_power_raw{i}(:, :, currentROI), 3));
+end
+
+for i = 1:height(MasterTable)
+    MasterTable.AlphaAmplitude{i} = all_alpha_power_averaged{i}; 
+end
+
+%% save updated master table
+
+
+RESULTS_DIR = fullfile("C:\Users\ssassi\Desktop\Assaf_Rotation", 'Results'); % TODO change path
+
+final_save_path = fullfile(RESULTS_DIR, 'Updated_MasterTable.mat');
+
+save(final_save_path, 'MasterTable', '-v7.3');
+disp(['table saved to: ' final_save_path]);
 
 
 %%

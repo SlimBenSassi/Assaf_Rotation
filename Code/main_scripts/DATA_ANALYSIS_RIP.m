@@ -46,7 +46,7 @@ MasterTable_copy = MasterTable;
 
 %% GLOBAL VARIABLES
 
-DO_BASELINE_CORRECTION = true;
+DO_BASELINE_CORRECTION = false;
 Fs = 1024; % Assuming Fs is 1024 Hz
 n_channels = 71; %change if needed
 PRE_EVENT_SEC = 0.5; % Assumed pre-stimulus window
@@ -101,10 +101,14 @@ disp('All single-trial Baselines are now averaged over ROI channels.');
 
 
 
-%% BASELINE PER TRIAL AND Z-SCORE PER PARTICIPANT
+%% BASELINE PER TRIAL
 
-MasterTable= baseline_and_subject_zscore(MasterTable, currentROI, false);
+if DO_BASELINE_CORRECTION
+    MasterTable= baseline_and_subject_zscore(MasterTable, currentROI, false);
+end
+
 RAW=false;
+
 disp('All single-trial baseline-corrected and z-scored per participant.');
 
 
@@ -1604,7 +1608,7 @@ T = size(MasterTable.AlphaAmplitude{1},1);   % #time samples in TF matrix
 time_vector = ((1:T) - time_zero_sample) / Fs;   % create the time axis in seconds
 
 % compute bin edges on your chosen time range:
-TIME_RANGE = [-0.495 0];   % adjust if needed
+TIME_RANGE = [-0.495 0.005];   % adjust if needed
 edges = linspace(TIME_RANGE(1), TIME_RANGE(2), N_BINS+1);
 
 % Pre-allocate
