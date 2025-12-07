@@ -118,7 +118,7 @@ disp('All single-trial baseline-corrected and z-scored per participant.');
 % Here we will take one alpha predictor and not each time-frequency
 % combination, choice is informed visually by the heatmap results.
 
-time_pred_bin = [-0.495; -0.050];
+time_pred_bin = [-0.300; -0.050];
 freq_pred_bin = [8; 12];
 
 time_zero_sample = round(PRE_EVENT_SEC * Fs); 
@@ -739,7 +739,7 @@ for o = 1:length(outcome_types)
     end
 end 
 
-%%
+%% PSYCHOMETRIC FUNCTIONS FR
 figure;
 numRows = 2;
 numCols = 3;
@@ -749,6 +749,7 @@ for o = 1:length(outcome_types)
         
         subplot(numRows, numCols, (o-1)*numCols + d);
         hold on;
+
         
         DATA = datasets{d}{1};
         intensities = unique(DATA.StimIntensity);
@@ -818,7 +819,9 @@ for o = 1:length(outcome_types)
         % -------------------------
         options = struct;
         options.sigmoidName = 'logistic';
-
+        if o==1
+            options.fixedPars = [NaN NaN NaN 0.5 NaN]; % Fixes gamma (4th parameter) at 0.5
+        end
         nSeen_all  = zeros(2, nInt);
         nTotal_all = zeros(2, nInt);
         
@@ -862,6 +865,8 @@ for o = 1:length(outcome_types)
             % 4. FIT THE PSYCHOMETRIC CURVE
             % -------------------------
             result = psignifit(data_ps, options);
+            %result.options.fixedPars = [0.5 NaN NaN NaN NaN];
+
             params = result.Fit;   % fitted parameters
 
             y_fit = result.psiHandle([x_fit(:), repmat(params', length(x_fit), 1)]);
@@ -878,11 +883,10 @@ for o = 1:length(outcome_types)
             %y_hi = result.psiHandle([x_fit(:), repmat(params_hi', length(x_fit), 1)]);
             
             % (Optional) Fill CI shading
-            fill([x_fit fliplr(x_fit)], ...
-                 [y_lo(:,1)' fliplr(y_hi(:,1)')], ...
-                 colors(b,:), ...
-                 'FaceAlpha', 0.15, 'EdgeColor', 'none', ...
-                 'HandleVisibility','off');
+            %fill([x_fit fliplr(x_fit)], ...
+             %    [y_lo(:,1)' fliplr(y_hi(:,1)')], ...
+                % 'FaceAlpha', 0.15, 'EdgeColor', 'none', ...
+               %  'HandleVisibility','off');
 
             % -------------------------
             % 6. SCATTER REAL DATA
@@ -1139,7 +1143,7 @@ for r = 1:length(datasets)        % loop over datasets → rows
                 nSamp = clustersTrue(c,2);
                 pCl = clustersTrue(c,4);
      
-                if pCl < 0.1
+                if pCl < 0.05
                     xs = time_bin_centers(startIdx:startIdx+nSamp-1);
                     plot(xs, meanBeta(startIdx:startIdx+nSamp-1), 'r', 'LineWidth', 10); % highlight
                      y_text = max(meanBeta(startIdx:startIdx+nSamp-1)) + 0.02; % adjust vertical position
@@ -1163,7 +1167,7 @@ time_window_sec = [-0.495, 0.005];               % window to analyze (sec relati
 freq_range_hz = [8 12];                    % alpha band to collapse
 N_TIME_BINS = 20;                          % number of time bins across window
 outcome = 'Subjective';                    % 'Subjective' or 'Objective'
-criterion = 0.05;  %because directional                         % cluster forming p-value (inside function)
+criterion = 0.1;  %because directional                         % cluster forming p-value (inside function)
 nPerms = 10000;    % permutations for cluster test (adjust)
 
 
@@ -1331,7 +1335,7 @@ for r = 1:length(datasets)        % loop over datasets → rows
              [0.9 0.9 0.9], 'EdgeColor','none','FaceAlpha',0.6);
         xlabel('Time relative to target (ms)');
         ylabel('Interaction Effect');
-        ylim([-0.04 0.08])
+        ylim([-0.15 0.15])
         title(sprintf('%s - %s: Interaction effect between Stimulus Intensity and Alpha', datasets{r}{2}, outcome));    
         xlim([time_bin_centers(1) time_bin_centers(end)]);
         
@@ -1341,7 +1345,7 @@ for r = 1:length(datasets)        % loop over datasets → rows
                 nSamp = clustersTrue(c,2);
                 pCl = clustersTrue(c,4);
      
-                if pCl < 0.05
+                if pCl < 0.1
                     xs = time_bin_centers(startIdx:startIdx+nSamp-1);
                     plot(xs, meanBeta(startIdx:startIdx+nSamp-1), 'r', 'LineWidth', 10); % highlight
                      y_text = max(meanBeta(startIdx:startIdx+nSamp-1)) + 0.02; % adjust vertical position
@@ -1596,6 +1600,7 @@ xlabel('Stimulus intensity'); ylabel('P(correct / seen)');
 legend('Location','best');
 grid on;
 
+
 %%
 
 
@@ -1695,4 +1700,297 @@ grid on;
 % Optional significance line
 hold on;
 yline(0.05,'r--','p=0.05');
+
+
+
+%% 
+stim_levels = 1:10;
+x_fit = linspace(min(stim_levels), max(stim_levels), 200)';
+
+figure;
+tiledlayout(numel(outcome_types), numel(datasets), 'TileSpacing','compact','Padding','compact');
+
+for oi = 1:numel(outcome_types)
+    outcome = outcome_types{oi};
+
+    % choose the correct variable name in your table
+    if strcmp(outcome, 'Objective')
+        Xvar = 'ObjectiveOutcome';
+    else
+        Xvar = 'SubjectiveOutcome';
+    end
+
+    % label rules
+    if strcmp(outcome, 'Objective')
+        ylabel_text = 'P(correct)';
+    else
+        ylabel_text = 'P(seen)';
+    end
+
+    % options for psignifit
+    options = struct;
+    options.sigmoidName = 'logistic';
+    if strcmp(outcome, 'Objective')
+        options.gamma = 0.5;    % guess rate fixed
+    end
+
+    for di = 1:numel(datasets)
+
+        DATA = datasets{di}{1};
+        data_name = datasets{di}{2};
+
+        nexttile;
+        hold on;
+
+        % compute alpha terciles per dataset
+        alpha = DATA.AlphaAmplitudeAvg(:);
+        edges = quantile(alpha, [0 1/3 2/3 1]);
+        DATA.alphaTerc = discretize(alpha, edges);
+
+        subjects = categories(DATA.SubjectID);
+
+        % store subject-level predictions to average
+        pred_low = [];
+        pred_high = [];
+
+        for si = 1:numel(subjects)
+            subj = subjects{si};
+            Dsub = DATA(DATA.SubjectID == subj, :);
+            if isempty(Dsub), continue; end
+
+            for terc = [1 3]   % low vs high tercile
+
+                Dterc = Dsub(Dsub.alphaTerc == terc, :);
+                if height(Dterc) < 6, continue; end
+
+                % build psignifit input
+                data_ps = [];
+                for lv = stim_levels
+                    sel = Dterc(Dterc.StimIntensity == lv, :);
+                    if isempty(sel), continue; end
+                    nTot = height(sel);
+                    nCorr = sum(sel.(Xvar)==1);
+                    data_ps(end+1,:) = [lv nCorr nTot];
+                end
+
+                if size(data_ps,1) < 4, continue; end
+
+                % fit
+                %result = psignifit(data_ps, options);
+
+                %y_fit = result.psiHandle(x_fit, result.Fit(:));
+                %y_fit = y_fit(:)';
+
+                % ensure x_fit is a column
+                x_fit = x_fit(:);
+               
+                
+                result = psignifit(data_ps, options);
+
+                % OLD CALL STYLE for psiHandle (your version)
+                params = result.Fit(:)';
+                y_temp = result.psiHandle([x_fit(:), repmat(params, length(x_fit), 1)]);
+                
+                % ensure column vector
+                y_fit = y_temp(:,1)'; 
+
+              
+
+                if terc == 1
+                    pred_low = [pred_low; y_fit];
+                else
+                    pred_high = [pred_high; y_fit];
+                end
+                disp('bro');
+            end
+        end
+
+        % group mean curves
+        m_low = mean(pred_low, 1, 'omitnan');
+        m_high = mean(pred_high, 1, 'omitnan');
+
+        % plot only the curves
+        plot(x_fit, m_low, 'b', 'LineWidth', 2);
+        plot(x_fit, m_high, 'r', 'LineWidth', 2);
+
+        title(data_name);
+        xlabel('Stimulus intensity');
+        ylabel(ylabel_text);
+
+        if oi == 1 && di == 1
+            legend({'Low α','High α'});
+        end
+
+        hold off;
+    end
+end
+
+
+
+
+%%
+
+stim_levels = 1:10;
+x_fit = linspace(min(stim_levels), max(stim_levels), 200)';
+
+% outcome types
+outcome_types = {'Objective','Subjective'};
+datasets = {
+    {MasterTable_Rhythm,   'Rhythm'}, 
+    {MasterTable_Interval, 'Interval'}, 
+    {MasterTable_Irregular,'Irregular'}
+};
+
+figure;
+tiledlayout(numel(outcome_types), numel(datasets), 'TileSpacing','compact','Padding','compact');
+
+for oi = 1:numel(outcome_types)
+
+    outcome = outcome_types{oi};
+    if strcmp(outcome,'Objective')
+        Xvar = 'ObjectiveOutcome';
+        ylabel_text = 'P(correct)';
+    else
+        Xvar = 'SubjectiveOutcome';
+        ylabel_text = 'P(seen)';
+    end
+
+    for di = 1:numel(datasets)
+
+        DATA = datasets{di}{1};
+        dname = datasets{di}{2};
+
+        nexttile; hold on;
+
+        % ---- Compute alpha terciles ----
+        alpha = DATA.AlphaAmplitudeAvg(:);
+        edges = quantile(alpha,[0 1/3 2/3 1]);
+        DATA.alphaTerc = discretize(alpha,edges);
+
+        % ---- Fit GLME ----
+        % logistic GLMM with random intercepts per subject
+        formula = sprintf('%s ~ AlphaAmplitudeAvg * StimIntensity + (1|SubjectID)', Xvar);
+        glme = fitglme(DATA, formula, 'Distribution','Binomial','Link','logit', 'FitMethod', 'Laplace');
+
+        % ---- Predict psychometric curves for LOW and HIGH α ----
+        terc_vals = [1 3];
+        colors = lines(2);
+
+        for ti = 1:2
+            terc = terc_vals(ti);
+
+            % representative alpha value for this bin
+            alpha_val = mean(alpha(DATA.alphaTerc==terc));
+
+            % prediction table
+            Tpred = table();
+            Tpred.StimIntensity   = x_fit;
+            Tpred.AlphaAmplitudeAvg = repmat(alpha_val, length(x_fit), 1);
+            Tpred.SubjectID = categorical(repmat(DATA.SubjectID(1), length(x_fit), 1));  
+            % subject identity irrelevant: random intercept averaged out
+
+            % GLME prediction
+            ypred = predict(glme, Tpred);
+
+            plot(x_fit, ypred, 'LineWidth', 2, 'Color', colors(ti,:));
+        end
+
+        title(dname);
+        xlabel('Stimulus intensity');
+        ylabel(ylabel_text);
+
+        if oi == 1 && di == 1
+            legend({'Low α', 'High α'});
+        end
+    end
+end
+
+%%
+
+stim_levels = 1:10;
+x_fit = linspace(min(stim_levels), max(stim_levels), 200)';
+
+% outcome types
+outcome_types = {'Objective','Subjective'};
+datasets = {
+    {MasterTable_Rhythm,   'Rhythm'}, 
+    {MasterTable_Interval, 'Interval'}, 
+    {MasterTable_Irregular,'Irregular'}
+};
+
+figure;
+tiledlayout(numel(outcome_types), numel(datasets), 'TileSpacing','compact','Padding','compact');
+
+for oi = 1:numel(outcome_types)
+
+    outcome = outcome_types{oi};
+    if strcmp(outcome,'Objective')
+        Xvar = 'ObjectiveOutcome';
+        ylabel_text = 'P(correct)';
+    else
+        Xvar = 'SubjectiveOutcome';
+        ylabel_text = 'P(seen)';
+    end
+
+    for di = 1:numel(datasets)
+
+        DATA = datasets{di}{1};
+        dname = datasets{di}{2};
+
+        nexttile; hold on;
+
+        % ---- Compute alpha terciles ----
+        alpha = DATA.AlphaAmplitudeAvg(:);
+        edges = quantile(alpha,[0 1/3 2/3 1]);
+        DATA.alphaTerc = discretize(alpha,edges);
+
+        % ---- Add polynomial columns ----
+        DATA.Stim1 = DATA.StimIntensity;
+        DATA.Stim2 = DATA.StimIntensity.^2;
+        DATA.Stim3 = DATA.StimIntensity.^3;
+
+        % ---- Fit CUBIC GLME ----
+        formula = sprintf([ ...
+            '%s ~ AlphaAmplitudeAvg * (Stim1 + Stim2 + Stim3) + (1|SubjectID)' ...
+        ], Xvar);
+
+        glme = fitglme(DATA, formula, ...
+            'Distribution','Binomial', 'Link','logit');
+
+        % ---- Predict psychometric curves for LOW and HIGH α ----
+        terc_vals = [1 3];
+        colors = lines(2);
+
+        for ti = 1:2
+            terc = terc_vals(ti);
+
+            % representative alpha value for this bin
+            alpha_val = mean(alpha(DATA.alphaTerc==terc));
+
+            % prediction table
+            Tpred = table();
+            Tpred.Stim1 = x_fit;
+            Tpred.Stim2 = x_fit.^2;
+            Tpred.Stim3 = x_fit.^3;
+            Tpred.StimIntensity = x_fit;  % only for completeness
+            Tpred.AlphaAmplitudeAvg = repmat(alpha_val, length(x_fit), 1);
+
+            % any SubjectID works; random intercept centered
+            Tpred.SubjectID = categorical(repmat(DATA.SubjectID(1), length(x_fit), 1));
+
+            % GLME prediction
+            ypred = predict(glme, Tpred);
+
+            plot(x_fit, ypred, 'LineWidth', 2, 'Color', colors(ti,:));
+        end
+
+        title(dname);
+        xlabel('Stimulus intensity');
+        ylabel(ylabel_text);
+
+        if oi == 1 && di == 1
+            legend({'Low α','High α'});
+        end
+    end
+end
 
