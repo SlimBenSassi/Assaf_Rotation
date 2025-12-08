@@ -13,9 +13,11 @@ function [clustersTrue, trueT_P, maxSumPermDistribution]=clusterBasedPermTest(da
 %   (e.g. number of subjects), tN = time samples. tN must be identical
 %   between two matrices, sN must be identical for within-subject paired test
 %   but can be different for between-subject independent test.
-% testType: 1=two datasets are measured for the same units of random factor
-%   ("within-subject" paired test), 2=two datasets are measured for different
-%   levels of the random factor ("between-subject" independent test).
+% testType:
+%   1=two datasets are measured for the same units of random factor ("within-subject" paired test)
+%   2=two datasets are measured for different levels of the random factor ("between-subject" independent test).
+%   3=one dataset that should be compared against 0, e.g. regression betas, or differences (in a "within-subject" design)
+%       NOTE: for testType=3, data2 must be empty (i.e. data2=[]).
 % criterion: p-value criterion for cluster identification. Lower values
 %   prioritize short clusters with a large difference over long clusters of
 %   smaller differences. Default 0.05.
@@ -43,6 +45,16 @@ end
 if nargin<4
     criterion=0.05;
 end
+if isempty(data1)
+    error('first input argument must contain data and cannot be empty')
+end
+if isempty(data2)
+    if testType~=3
+        error('an empty variable as the second input is only allowed for testType=3')
+    else
+        data2=zeros(size(data1));
+    end
+end
 
 
 rng('default') % initialize rng with default for replicability, otherwise change to rng('shuffle')
@@ -50,9 +62,9 @@ rng('default') % initialize rng with default for replicability, otherwise change
 
 % step 1: find cluster in true data
 % 1.1: run ttest on true data
-if testType==1
+if testType==1 || testType==3
     if size(data1,1)~=size(data2,1)
-        error('data mats must have same number of rows for within-subject test')
+        error('data matrices must have same number of rows for within-subject test')
     else
         [~,p,~,statsTrue]=ttest(data1-data2); % one group, "within-subject" test
         tThreshold=abs(tinv(criterion/2,size(data1,1)-1));
@@ -74,7 +86,7 @@ trueT_P=[statsTrue.tstat; p]; % for output
 
 % step 2: generate shuffling data and permutation distribution
 % 2.1: create permutation matrix, while making sure none is repeated (if possible given system memory limits)
-if testType==1
+if testType==1 || testType==3
     nPossiblePerms=2^(size(data1,1));
     if nPossiblePerms>100*nPerms || size(data1,1)>24 % create random perms if sufficient perms exist or creating all exceeds memory limits
         permsToUse=round(rand(size(data1,1),nPerms));
@@ -119,7 +131,7 @@ end
 % 2.2: create shuffled data and run ttest, depending on test type
 % (separated to reduce memory load on parallel workers)
 maxSumPermDistribution=zeros(nPerms,1);
-if testType==1 % within
+if testType==1 || testType==3 % within
     parfor perm=1:nPerms
         tVec=abs(simpleTTestWithin(diffData.*repmat(permsToUse(:,perm), 1, size(data1,2)))); % flip sign of randomly selected data units
         clustersPerm=findClust(tVec>tThreshold);

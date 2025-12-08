@@ -1741,7 +1741,7 @@ for row = 1:length(outcome_types)      % subjective/objective
 
         % --- AGGREGATE ---
         Diff_Matrix = cell2mat(participant_diff_time_courses);
-        Diff_Matrix = Diff_Matrix(:,1:512);
+        Diff_M
         avg_diff_tc = mean(Diff_Matrix,1);
         sem_diff_tc = std(Diff_Matrix,0,1) / sqrt(num_participants);
 
@@ -1753,7 +1753,7 @@ for row = 1:length(outcome_types)      % subjective/objective
         
         testType  = 3;              % within-subject comparison
         criterion = 0.1;                     % cluster-forming threshold
-        nPerms    = 10000;                     % or your preferred number
+        nPerms    = 5000;                     % or your preferred number
         
         [clusters, trueT_P, maxSumPermDistribution] = ...
     clusterBasedPermTest(data1, data2, testType, criterion, nPerms);
